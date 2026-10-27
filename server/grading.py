@@ -107,7 +107,12 @@ RETRY_S = 60.0              # s before a cell whose road data failed is asked fo
 # climbs from its ends: the deck over I-20 near Temple, GA reached ~2.5 m over the lanes (trucks hit it, 2026-10-19).
 # The roads leading onto such a bridge are now graded up to the height the deck needs, over a smooth ramp, as real
 # approach fills are: the bridge's ends (sampled from this graded ground) then sit high enough.
-APPROACH_ON = os.environ.get("BNE_APPROACH_RAMPS", "on") != "off"
+# Off by default with UNDER_ON, UNDER_ANY_ON and roads.SKEW_ON (the user, 2026-10-27, an overpass in Finland with a ramp
+# up to the deck, a trench under it and the road under in slabs: "make them generate so that they won't mind what's under
+# them"): a bridge's deck spans between its ends' ground and nothing under or beside it is reshaped for it. A deck may
+# then sit low over the road under it. BNE_APPROACH_RAMPS=on, BNE_UNDERPASS=on, BNE_UNDERPASS_ANY=on, BNE_SKEW_DECKS=on
+# bring them back.
+APPROACH_ON = os.environ.get("BNE_APPROACH_RAMPS", "off") == "on"
 APPROACH_GRADE = float(os.environ.get("BNE_APPROACH_GRADE", "0.05"))   # steepest grade of a ramp (its middle)
 APPROACH_MAX_LIFT = 10.0    # m an abutment is raised at most
 APPROACH_MIN_LIFT = 0.5     # m: less is left as it is
@@ -143,7 +148,7 @@ CHAIN_LOOK_M = 10.0         # m along each part its direction at the node is tak
 # deck's height (its abutments' ground, interpolated) minus UNDER_CLEAR_M, falling back at UNDER_GRADE. Lidar terrain
 # removes bridges and interpolates across the gap, at about the deck's height: the road under ran 0.7-2.5 m under the
 # girders (A28 near Zwolle, I-84 over NE 181st Ave in Portland, I-395 in Springfield VA, 2026-10-22). Never raises.
-UNDER_ON = os.environ.get("BNE_UNDERPASS", "on") != "off"
+UNDER_ON = os.environ.get("BNE_UNDERPASS", "off") == "on"         # (off: see APPROACH_ON)
 UNGRADED = {"raceway"}      # classes planned by nobody: the terrain is their surface (an oval's banking, GitHub #143) ...
 UNGRADED_MARGIN_M = 2.0     # ... and nothing else grades their carriageway (+ this: kerbs, apron): a road crossing a
                             # track, or a tunnel's open approach under one, cut a flat trench through Daytona's banking
@@ -156,7 +161,7 @@ UNDER_MAX_GRADE = 0.10      # a dip's ramp made steeper, up to this, to end insi
 # ... and under any other short overpass, by what its ramps could not raise it (BR-381 near Pouso Alegre: a local
 # road's bridge whose ramps the frontage roads at both ends held down sat ~1 m over the motorway; the 30 m elevation
 # data has no cutting under it, and the AI car drove into its abutment wall, 2026-10-25)
-UNDER_ANY_ON = os.environ.get("BNE_UNDERPASS_ANY", "on") != "off"
+UNDER_ANY_ON = os.environ.get("BNE_UNDERPASS_ANY", "off") == "on"  # (off: see APPROACH_ON)
 ABUT_NEAR_M = 14.0          # m from the bridge end the road is checked ...
 ABUT_FAR_M = 40.0           # ... against its grade from ABUT_NEAR_M to this far
 ABUT_STEEP = 0.15           # a fall this much steeper than that grade, near the end: the valley's side, not the road

@@ -476,6 +476,7 @@ class WallHeightTest(unittest.TestCase):
         self.assertEqual(grading.wall_max_h(street), grading.WALL_MAX_H_M)
 
 
+@unittest.mock.patch.multiple(grading, APPROACH_ON=True, UNDER_ON=True, UNDER_ANY_ON=True)   # (off by default)
 class UnderpassTest(unittest.TestCase):
     def test_road_dips_under_a_motorway_overpass(self):
         """A local road crossing under a short motorway bridge whose terrain was interpolated at deck height (lidar
@@ -512,6 +513,7 @@ class UnderDipTest(unittest.TestCase):
         self.assertIsNone(grading.under_dip(d, 4.0, (20.0, 300.0)), "no room even at UNDER_MAX_GRADE")
 
 
+@unittest.mock.patch.multiple(grading, APPROACH_ON=True, UNDER_ON=True, UNDER_ANY_ON=True)   # (off by default)
 class UnderpassShortfallTest(unittest.TestCase):
     def test_road_under_gives_way_for_what_the_ramps_could_not_raise(self):
         """A local road's bridge over a motorway (the motorway never rises): with room for its ramps the overpass rises

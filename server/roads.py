@@ -349,7 +349,7 @@ def _cell_ranges(feats, load_only=False):
 # lengthened until it covers, across the upper road's whole width, the lower road's carriageway, SKEW_MARGIN_M and an
 # abutment slope of SKEW_SLOPE_M either side: (lower half width + margin + slope) / sin + upper half width / tan of
 # the angle between them, at most SKEW_MAX_M more per end (onto the road joined there: _skew_decks).
-SKEW_ON = os.environ.get("BNE_SKEW_DECKS", "on") != "off"
+SKEW_ON = os.environ.get("BNE_SKEW_DECKS", "off") == "on"      # (off: see grading.APPROACH_ON)
 SKEW_MARGIN_M = 1.5         # m past the lower road's carriageway edge kept level (its shoulder)
 SKEW_SLOPE_M = 6.0          # m for the abutment's slope up to the upper road, under the deck
 SKEW_MAX_M = 30.0           # m a bridge range grows at most at each end

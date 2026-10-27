@@ -974,7 +974,7 @@ class Fetcher:
                     extra = ", ".join(f"{k} {m[k]}" for k in ("s404", "s429", "s3xx", "s5xx", "errors", "retries",
                                                                "deferred", "unavailable", "trips") if m[k])
                     w = h.waited
-                    if w[0]:        # (Finnish fork: the time requests stood waiting on this host's caps)
+                    if w[0]:        # (the time requests stood waiting on this host's caps)
                         extra += (", " if extra else "") + f"waited {w[0]}x {w[1]:.1f} s, longest {w[2]:.1f} s"
                     parts.append(f"{h.name} {m['requests']} req {m['bytes'] / 1e6:.1f} MB"
                                  + (f" ({extra})" if extra else "") + f", today {h.day['requests']}")

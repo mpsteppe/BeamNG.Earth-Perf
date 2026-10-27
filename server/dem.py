@@ -53,7 +53,7 @@ URGENT_WORKERS = 16         # Dem.urgent(): its own fetch threads (with the 16 s
 # pages shared, dropped instead of swapped under memory pressure. At most MIRROR_MB on disk (the oldest go first);
 # older than MIRROR_MAX_AGE_S it is made again (Mapterhorn adds lidar areas). DECODED_VERSION: raise it when what a
 # tile holds changes (the decoding, the ground filter).
-MIRROR_MB = float(os.environ.get("BNE_DEM_MIRROR_MB", "1024"))   # (Finnish fork: settable, 2026-10-27)
+MIRROR_MB = float(os.environ.get("BNE_DEM_MIRROR_MB", "1024"))   # (settable, 2026-10-27)
 MIRROR_PRUNE_S = 120.0  # the mirror pruned at most this often per process (each prune walks it all)
 MIRROR_MAX_AGE_S = 30 * 86400
 DECODED_VERSION = 2          # 2: tiles past the lidar's depth upsampled from its deepest tile, not z12; its holes
@@ -444,7 +444,7 @@ class Dem:
 
     # (a process's first write prunes: the count of a session's own writes alone never reached the threshold when
     # each run wrote less, and the mirror grew past MIRROR_MB across sessions: 6.3 GB on a Steam Deck, 2026-10-23)
-    # (the Finnish fork: not with BNE_NO_FIRST_PRUNE=1: earthd prunes at its start (prune_own_caches), and each of ~13
+    # (not with BNE_NO_FIRST_PRUNE=1: earthd prunes at its start (prune_own_caches), and each of ~13
     # processes walking the whole decoded mirror on its first write was ~180k stat calls, most of a fresh place's road tile time,
     # 2026-10-27)
     _mirror_written = 0.0 if os.environ.get("BNE_NO_FIRST_PRUNE") == "1" else MIRROR_MB * 1e6

@@ -250,7 +250,7 @@ def _write_segs(path, segs):
             pass
 
 
-STORE_MB = float(os.environ.get("BNE_ROADWIDTH_MB", "1024"))   # (Finnish fork: settable)             # the walls' files kept at most (earthd's start-up prune; 3.5 GB on a Steam Deck, 2026-10-23)
+STORE_MB = float(os.environ.get("BNE_ROADWIDTH_MB", "1024"))   # (settable)             # the walls' files kept at most (earthd's start-up prune; 3.5 GB on a Steam Deck, 2026-10-23)
 
 
 def store_dir(cache_dir, md):

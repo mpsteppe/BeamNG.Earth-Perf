@@ -150,7 +150,7 @@ def lower_priority(nice, worker=False):
     server (worker False, nice > 0); a worker keeps the class it inherited. Returns the change made, for the log
     ("nice +n", "below normal", None)."""
     if sys.platform == "win32":
-        try:                    # Finnish fork hook: no efficiency mode
+        try:                    # (no efficiency mode: no_power_throttling)
             no_power_throttling()
         except OSError:
             pass
@@ -173,7 +173,7 @@ def lower_priority(nice, worker=False):
     return "below normal"
 
 
-# The Finnish fork: Windows 11 put the below-normal server's work on a hybrid CPU's E-cores (an i7-12700K, 2026-10-27:
+# Windows 11 put the below-normal server's work on a hybrid CPU's E-cores (an i7-12700K, 2026-10-27:
 # its 4 E-cores at 100 % and its 2 P-cores at 0-27 % while the ground ahead took 9 s and the player fell through). This
 # opts the process out of power throttling (EcoQoS), so the scheduler may run it on any core it has; the class stays.
 PROCESS_POWER_THROTTLING = 4

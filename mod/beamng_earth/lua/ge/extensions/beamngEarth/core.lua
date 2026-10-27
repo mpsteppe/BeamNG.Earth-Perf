@@ -1600,6 +1600,8 @@ end
 M.HITCH_MS = 50
 M.HITCH_KEEP = 64
 local hitchClock = stopwatch.clock()
+local GC_STEP_MS = tonumber(os.getenv and os.getenv('BNE_GC_STEP_MS') or '') or 1.0   -- (0 = off)
+local GC_STEP_KB = 64
 local marks, prevMarks = {}, {}
 local hitches = {}
 local function mark(name, t0)
@@ -1809,6 +1811,16 @@ local function onUpdate(dtReal, dtSim)
     if not ok then log('E', 'beamngEarth', 'message ' .. tostring(msg.type) .. ' failed: ' .. tostring(err)) end
   end
   t = mark('net', t)
+  -- Lua garbage in small steps every frame (the user's stutter driving, 2026-10-27: the engine's LuaGC took 120-190 ms
+  -- in single frames as the heap grew 128 -> 259 MB): steps until GC_STEP_MS is spent or a cycle ends, so the engine
+  -- never faces a whole cycle in one frame.
+  if GC_STEP_MS > 0 then
+    local gcEnd = t + GC_STEP_MS
+    repeat
+      if collectgarbage('step', GC_STEP_KB) then break end
+    until hitchClock() >= gcEnd
+    t = mark('gc', t)
+  end
   if not scenetree.MissionGroup then return end -- no level loaded
   tickMotionBlur()
 

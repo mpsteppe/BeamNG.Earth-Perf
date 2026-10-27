@@ -39,14 +39,26 @@ async fn init() -> Option<Gpu> {
         backends: wgpu::Backends::VULKAN | wgpu::Backends::DX12 | wgpu::Backends::METAL,
         ..Default::default()
     });
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            force_fallback_adapter: false,
-            compatible_surface: None,
-        })
-        .await
-        .ok()?;
+    // (the Finnish fork: BNGE_GPU_NAME=<part of a name> picks that GPU, a second card the game does not render on:
+    // the user's spare RTX 3090 beside the game's RTX 5080, 2026-10-27; none matching: the usual choice)
+    let named = std::env::var("BNGE_GPU_NAME").ok().filter(|v| !v.trim().is_empty()).and_then(|want| {
+        let want = want.trim().to_lowercase();
+        instance
+            .enumerate_adapters(wgpu::Backends::VULKAN | wgpu::Backends::DX12 | wgpu::Backends::METAL)
+            .into_iter()
+            .find(|a| a.get_info().name.to_lowercase().contains(&want))
+    });
+    let adapter = match named {
+        Some(a) => a,
+        None => instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                force_fallback_adapter: false,
+                compatible_surface: None,
+            })
+            .await
+            .ok()?,
+    };
     let info = adapter.get_info();
     if info.device_type == wgpu::DeviceType::Cpu {
         return None; // (a software rasteriser: no faster than the CPU path)

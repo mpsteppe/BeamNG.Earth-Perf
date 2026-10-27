@@ -89,7 +89,9 @@ def gpu():
     """The GPU's name when the kernels can run there (earthfast gpu.rs: Vulkan / DX12 / Metal), else None (none, an old
     module, or BNGE_GPU=0): the callers keep their CPU path. Found once (~0.4 s, the first call)."""
     global _GPU
-    if _GPU is None and sys.platform == "win32" and os.environ.get("BNGE_GPU") != "1":
+    # (the Finnish fork: BNGE_GPU_NAME picking a card of the server's own, one the game does not draw with, is on too:
+    # the freezes below were the game's GPU held, 2026-10-27)
+    if _GPU is None and sys.platform == "win32" and os.environ.get("BNGE_GPU") != "1"             and not os.environ.get("BNGE_GPU_NAME", "").strip():
         # Windows: off unless BNGE_GPU=1 (2026-10-23). 1.6.0's players on Windows saw the game freeze for seconds in new
         # places (none on Linux or a Steam Deck); a long compute dispatch from the server can hold the GPU the game draws
         # with, and Windows often cannot preempt it. The CPU path is 1.5.5's.

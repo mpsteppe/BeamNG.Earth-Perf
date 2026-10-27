@@ -149,6 +149,11 @@ def lower_priority(nice, worker=False):
     """This process below the game: os.nice(nice) where it exists; on Windows the "below normal" class for the
     server (worker False, nice > 0); a worker keeps the class it inherited. Returns the change made, for the log
     ("nice +n", "below normal", None)."""
+    if sys.platform == "win32":
+        try:                    # Finnish fork hook: no efficiency mode
+            no_power_throttling()
+        except OSError:
+            pass
     if not nice or nice <= 0:
         return None
     if hasattr(os, "nice"):
@@ -166,6 +171,31 @@ def lower_priority(nice, worker=False):
     if not k32.SetPriorityClass(k32.GetCurrentProcess(), WIN_BELOW_NORMAL):
         raise OSError("SetPriorityClass(below normal) failed")
     return "below normal"
+
+
+# The Finnish fork: Windows 11 put the below-normal server's work on a hybrid CPU's E-cores (an i7-12700K, 2026-10-27:
+# its 4 E-cores at 100 % and its 2 P-cores at 0-27 % while the ground ahead took 9 s and the player fell through). This
+# opts the process out of power throttling (EcoQoS), so the scheduler may run it on any core it has; the class stays.
+PROCESS_POWER_THROTTLING = 4
+POWER_THROTTLING_EXECUTION_SPEED = 0x1
+
+
+def no_power_throttling():
+    """Windows: this process never throttled to the efficiency cores (SetProcessInformation ProcessPowerThrottling,
+    execution speed controlled and off). Raises OSError when the call fails."""
+    import ctypes
+    from ctypes import wintypes
+
+    class State(ctypes.Structure):
+        _fields_ = [("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG), ("StateMask", wintypes.ULONG)]
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.GetCurrentProcess.restype = wintypes.HANDLE
+    k32.SetProcessInformation.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+    k32.SetProcessInformation.restype = wintypes.BOOL
+    st = State(1, POWER_THROTTLING_EXECUTION_SPEED, 0)
+    if not k32.SetProcessInformation(k32.GetCurrentProcess(), PROCESS_POWER_THROTTLING, ctypes.byref(st),
+                                     ctypes.sizeof(st)):
+        raise OSError(f"SetProcessInformation(power throttling) failed: {ctypes.get_last_error()}")
 
 
 def road_processes(cpus=None, gb=None):

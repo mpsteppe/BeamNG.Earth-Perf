@@ -157,7 +157,7 @@ def digest_arrays(arrays):
 # instead of swapped under memory pressure. At most MIRROR_MB on disk (the least recently read go first); the vector
 # layers' `en` (the cell frame's metres, Features.localize) is kept with them.
 BUILD_WAIT_S = 180.0        # a cell layer another process is building is waited for this long (xproc.once)
-MIRROR_MB = 2048
+MIRROR_MB = float(os.environ.get("BNE_MAPDATA_MIRROR_MB", "2048"))   # (Finnish fork: settable, 2026-10-27)
 MIRROR_PRUNE_S = 120.0  # the mirror pruned at most this often per process (each prune walks it all)
 MIRROR_SMALL = 65536    # bytes: an array this small is read into memory (no mapping)
 MEM_MB = 192        # decoded cell layers kept in memory per process (a road tile reads its ~4 cells, each read by
@@ -495,7 +495,10 @@ class MapData:
 
     # (a process's first write prunes: the count of a session's own writes alone never reached the threshold when
     # each run wrote less, and the mirror grew past MIRROR_MB across sessions: 6.3 GB on a Steam Deck, 2026-10-23)
-    _mirror_written = MIRROR_MB * 1e6
+    # (the Finnish fork: not with BNE_NO_FIRST_PRUNE=1: earthd prunes at its start (prune_own_caches), and each of ~13
+    # processes walking the whole mirror on its first write was ~180k stat calls, most of a fresh place's road tile time,
+    # 2026-10-27)
+    _mirror_written = 0.0 if os.environ.get("BNE_NO_FIRST_PRUNE") == "1" else MIRROR_MB * 1e6
     _mirror_pruned = -1e9
     _mirror_lock = threading.Lock()
 

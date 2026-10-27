@@ -20,6 +20,7 @@ EXE = "BeamNG.drive.x64"
 WIN = sys.platform == "win32"
 WIN_EXE = EXE.lower() + ".exe"
 SERVER_SHARE = 0.25         # of the physical cores, at least one, never more than half
+GAME_MIN_CORES = 4          # the Finnish fork: physical cores BNGE_SERVER_CORES always leaves the game
 
 
 def _siblings(usable=None):
@@ -46,10 +47,12 @@ def split(share=SERVER_SHARE):
     if len(cores) < 4:
         return None, None              # too few cores to split usefully
     k = max(1, min(len(cores) // 2, int(round(len(cores) * share))))
-    try:                                # (the player's choice: BNGE_SERVER_CORES=<n>, still at most half)
+    try:                                # (the player's choice: BNGE_SERVER_CORES=<n>, the game keeping GAME_MIN_CORES;
+                                        # Finnish fork: past half, the user 2026-10-27: the server's 6 of 12 cores at
+                                        # 100 % while the game's sat at 30 %)
         want = int(os.environ.get("BNGE_SERVER_CORES", "") or 0)
         if want > 0:
-            k = max(1, min(len(cores) // 2, want))
+            k = max(1, min(max(len(cores) // 2, len(cores) - GAME_MIN_CORES), want))
     except ValueError:
         pass
     server = {c for _, cpus in cores[-k:] for c in cpus}

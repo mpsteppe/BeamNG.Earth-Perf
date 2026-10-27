@@ -12,6 +12,7 @@ init(...) runs once in the process (ProcessPoolExecutor initializer); build(...)
 far_geometry(...) (the far-tile workers, the same state) are its jobs. warm_q (a multiprocessing queue) carries the road cells to plan ahead of the player: (anchor id, lat,
 lon, [mapcells.CellKey]), the latest list replacing the earlier one.
 """
+import json
 import logging
 import os
 import queue
@@ -236,10 +237,78 @@ def _take_pads(fuel_pads):
         _s.surface.add_fuel_pads(fuel_pads or ())
 
 
-def build(aid, lat, lon, hm_zoom, q, cx, cy, size, out_dir, name, ter_name=None, fuel_pads=None):
+def block_key(lat, lon, hm_zoom, q, cx, cy, size, settings, versions, pads):
+    """The revisit key of a ground block (kind "ground"): the anchor's place, the block, the server's settings and map
+    data versions (the caller's), its gas station pads' ids. None: not kept."""
+    import revisit
+    if not revisit.ON or "ground" in revisit.SKIP:
+        return None
+    return revisit.key("ground", round(float(lat), 7), round(float(lon), 7), int(hm_zoom), float(q), float(cx),
+                       float(cy), int(size), tuple(settings), versions, tuple(sorted(str(p) for p in pads)))
+
+
+def block_load(k, out_dir, name, ter_name):
+    """A ground block from the revisit cache (key k) written as name (its heightmap), its masks beside it and the .ter
+    ter_name: the info dict as built, or None when there is none."""
+    import revisit
+    got = revisit.load(_s.cache_dir if _s is not None else revisit.CACHE_DIR, "ground", k) if k is not None else None
+    if got is None:
+        return None
+    blobs, info = got
+    info = dict(info or {})
+    _write_bytes(os.path.join(out_dir, name), blobs["hm.png"])
+    if info.pop("hasLayers", False):
+        names = surfacemod.mask_names(name[:-4])
+        for i, n in enumerate(names):
+            _write_bytes(os.path.join(out_dir, n), blobs[f"m{i}.png"])
+        info["layers"] = names
+    _write_bytes(os.path.join(out_dir, ter_name), blobs["block.ter"])
+    info["ter"] = ter_name
+    return info
+
+
+def block_keep(k, out_dir, name, info):
+    """A built ground block (name, the info its build returned) kept in the revisit cache under key k: only a complete
+    one (its land cover and roads all there; the caller checked revisit.faults). Never raises."""
+    import revisit
+    if k is None or not info.get("surfaceComplete", True) or not info.get("ter"):
+        return False
+    try:
+        blobs = {}
+        with open(os.path.join(out_dir, name), "rb") as f:
+            blobs["hm.png"] = f.read()
+        for i, n in enumerate(info.get("layers") or ()):
+            with open(os.path.join(out_dir, n), "rb") as f:
+                blobs[f"m{i}.png"] = f.read()
+        with open(os.path.join(out_dir, info["ter"]), "rb") as f:
+            blobs["block.ter"] = f.read()
+        extra = {k_: v for k_, v in info.items() if k_ not in ("layers", "ter", "stages")}
+        extra["hasLayers"] = bool(info.get("layers"))
+        extra = json.loads(json.dumps(extra, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)))
+        return revisit.store(_s.cache_dir if _s is not None else revisit.CACHE_DIR, "ground", k, blobs, extra)
+    except Exception as e:      # (not kept rather than no block)
+        log.debug("revisit: ground block %s not kept: %s: %s", name, type(e).__name__, e)
+        return False
+
+
+def build(aid, lat, lon, hm_zoom, q, cx, cy, size, out_dir, name, ter_name=None, fuel_pads=None, revisit_args=None):
     """Build and write the block (heightmap PNG name in out_dir, its surface masks beside it, and the
     .ter ter_name if given). fuel_pads: the gas station pads around it (the server's: _take_pads). Returns the info
-    dict of earthd's make_heightmap (without seconds / zoom / base)."""
+    dict of earthd's make_heightmap (without seconds / zoom / base). revisit_args: block_key's arguments (the
+    server's): a complete build is kept in the revisit cache (one built in this place before was taken from it by the
+    server: earthd.Server.make_heightmap)."""
+    import revisit
+    f0 = revisit.faults()
+    k = block_key(*revisit_args) if revisit_args is not None and ter_name is not None else None
+    info = _build(aid, lat, lon, hm_zoom, q, cx, cy, size, out_dir, name, ter_name, fuel_pads)
+    if k is not None and revisit.faults() == f0 and block_key(*revisit_args) == k:    # (nothing arrived meanwhile)
+        t1 = time.perf_counter()
+        if block_keep(k, out_dir, name, info):
+            info["stages"]["revisitKeep"] = time.perf_counter() - t1
+    return info
+
+
+def _build(aid, lat, lon, hm_zoom, q, cx, cy, size, out_dir, name, ter_name=None, fuel_pads=None):
     _take_pads(fuel_pads)
     t0 = time.perf_counter()
     g, chunks = _s.anchor(aid, lat, lon)

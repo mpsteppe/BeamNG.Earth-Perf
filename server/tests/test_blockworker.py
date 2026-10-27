@@ -75,6 +75,25 @@ class RoadsTileTest(unittest.TestCase):
 
 
 
+class GroundRevisitTest(unittest.TestCase):
+    def test_a_built_block_comes_back_from_the_cache(self):
+        blockworker._s = SimpleNamespace(md=None, dem=FakeDem(), widths=None, surface=None, airports=None, sea=None,
+                                         cache_dir=tmp_cache(self), anchor=lambda aid, lat, lon: (None, None))
+        rv = (LAT, LON, 15, 0.05, 0.0, 0.0, 64, (False,) * 6, None, [])
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            self.assertIsNone(blockworker.block_load(blockworker.block_key(*rv), a, "hm_1_0_0.png", "t.ter"))
+            built = blockworker.build(1, LAT, LON, 15, 0.05, 0.0, 0.0, 64, a, "hm_1_0_0.png", "hm_1_0_0_1.ter",
+                                      revisit_args=rv)
+            self.assertIn("revisitKeep", built["stages"])
+            got = blockworker.block_load(blockworker.block_key(*rv), b, "hm_2_0_0.png", "hm_2_0_0_7.ter")
+            self.assertEqual(got["ter"], "hm_2_0_0_7.ter")
+            self.assertEqual(got["zBase"], built["zBase"])
+            self.assertEqual(Path(a, "hm_1_0_0.png").read_bytes(), Path(b, "hm_2_0_0.png").read_bytes())
+            self.assertEqual(Path(a, "hm_1_0_0_1.ter").read_bytes(), Path(b, "hm_2_0_0_7.ter").read_bytes())
+            other = rv[:4] + (64.0,) + rv[5:]       # (another block: not that one)
+            self.assertIsNone(blockworker.block_load(blockworker.block_key(*other), b, "x.png", "x.ter"))
+
+
 class NavgraphTest(unittest.TestCase):
     """blockworker.navgraph: the graph built in a road process is the one navgraph.build makes with the same inputs
     (the server's way), its file written and the rules passed through."""

@@ -1559,22 +1559,55 @@ class Server:
                 self._base_photo, anchor, cx, cy, self._base_process(lane), lane == LANE_REQUEST)
         pool = self.block_pools[lane][0] if self.block_pools and progress is None else None
         key = (anchor.id, cx, cy)
+        rv = self.block_revisit(anchor, cx, cy, q)
+        info = self.block_from_revisit(rv, key)
+        if info is not None:            # built in this place before: from the revisit cache
+            info["stages"] = {"revisit": time.perf_counter() - t0}
+            log.info("terrain %s from the revisit cache in %.2f s", key, time.perf_counter() - t0)
+            return self._finish_heightmap(anchor, cx, cy, info, t0, base)
         try:
             if pool is not None:
                 self.hm_stage[key] = "the block process"
                 info = pool.submit(
                     blockworker.build, anchor.id, anchor.lat, anchor.lon, anchor.hm_zoom, q, cx, cy,
                     self.layout.block, self.out_dir, self.hm_name(key), self.ter_name(key),
-                    fuel_pads=self.block_fuel_pads(anchor, cx, cy, self.layout.block)).result()
+                    fuel_pads=self.block_fuel_pads(anchor, cx, cy, self.layout.block), revisit_args=rv).result()
                 self.hm_stage[key] = "its base photo"
                 return self._finish_heightmap(anchor, cx, cy, info, t0, base)
             self.hm_stage[key] = "the build in the server's process"
             urgent = getattr(self.dem, "urgent", None)     # (test DEMs have no lane)
             with urgent() if urgent is not None else contextlib.nullcontext():     # the player waits for it (teleport,
                 # resync): ahead of every other download
-                return self._make_heightmap_here(anchor, cx, cy, progress, t0, q, base)
+                return self._make_heightmap_here(anchor, cx, cy, progress, t0, q, base, revisit_args=rv)
         finally:
             self.hm_stage.pop(key, None)
+
+    def block_revisit(self, anchor, cx, cy, q=None):
+        """blockworker.block_key's arguments for a block of anchor, or None when ground blocks are not kept."""
+        if not revisitmod.ON or "ground" in revisitmod.SKIP:
+            return None
+        q = self.anchor_q(anchor) if q is None else q
+        pads = self.block_fuel_pads(anchor, cx, cy, self.layout.block)
+        settings = (bool(self.grading), self.road_widths is not None, self.surface is not None,
+                    self.airports is not None, self.sea is not None, self.mapdata is not None)
+        return (anchor.lat, anchor.lon, anchor.hm_zoom, q, cx, cy, self.layout.block, settings,
+                self.mapdata.versions() if self.mapdata is not None else None, [sid for sid, _ in pads])
+
+    def block_from_revisit(self, rv, key, load=True):
+        """The block of key from the revisit cache (blockworker.block_load: its files written, its info), or None.
+        load False: only whether it is there (True / None)."""
+        if rv is None:
+            return None
+        try:
+            k = blockworker.block_key(*rv)
+            if k is None:
+                return None
+            if not load:
+                return True if os.path.exists(revisitmod._path(self.cache_dir, "ground", k)) else None
+            return blockworker.block_load(k, self.out_dir, self.hm_name(key), self.ter_name(key))
+        except Exception:
+            log.exception("revisit: ground block %s not read", key)
+            return None
 
     def make_provisional(self, anchor, cx, cy, progress, ground_at=(0.0, 0.0)):
         """Worker thread: a teleport's first block before its road plans (the user, 2026-10-22: "place the car as
@@ -1599,16 +1632,21 @@ class Server:
                  " ".join(f"{k} {v:.2f}" for k, v in info.get("stages", {}).items()))
         return info
 
-    def _make_heightmap_here(self, anchor, cx, cy, progress, t0, q, base=None, provisional=False, ground_at=(0.0, 0.0)):
+    def _make_heightmap_here(self, anchor, cx, cy, progress, t0, q, base=None, provisional=False, ground_at=(0.0, 0.0),
+                             revisit_args=None):
         with self.hm_here_lock:
             self.hm_here += 1
         try:
-            return self._make_heightmap_here_(anchor, cx, cy, progress, t0, q, base, provisional, ground_at)
+            return self._make_heightmap_here_(anchor, cx, cy, progress, t0, q, base, provisional, ground_at,
+                                              revisit_args)
         finally:
             with self.hm_here_lock:
                 self.hm_here -= 1
 
-    def _make_heightmap_here_(self, anchor, cx, cy, progress, t0, q, base=None, provisional=False, ground_at=(0.0, 0.0)):
+    def _make_heightmap_here_(self, anchor, cx, cy, progress, t0, q, base=None, provisional=False, ground_at=(0.0, 0.0),
+                              revisit_args=None):
+        f0 = revisitmod.faults()
+        rk = blockworker.block_key(*revisit_args) if revisit_args is not None and not provisional else None
         keep = {}
         g = None if provisional else self.grader_for(anchor)
         c0 = time.thread_time()
@@ -1676,6 +1714,10 @@ class Server:
         if mats is not None:          # the .ter's own material list (MATERIALS indices)
             info["mats"] = mats
         info["stages"] = stages
+        if rk is not None and revisitmod.faults() == f0 and blockworker.block_key(*revisit_args) == rk:
+            t1 = time.perf_counter()        # (complete, nothing arrived meanwhile: kept for a later visit)
+            if blockworker.block_keep(rk, self.out_dir, self.hm_name((anchor.id, cx, cy)), info):
+                stages["revisitKeep"] = time.perf_counter() - t1
         return self._finish_heightmap(anchor, cx, cy, info, t0, base)
 
     def tunnels_of(self, anchor, elev, g):
@@ -3570,7 +3612,12 @@ class Connection:
         t0 = time.perf_counter()
         # a teleport's first block without its road plans, the graded one sent when built (make_provisional)
         provisional = teleport and PROVISIONAL_FIRST and self.s.grading
-        if self.s.surface is not None and not provisional:
+        cached = await asyncio.get_running_loop().run_in_executor(
+                self.s.ui_pool, self.s.block_from_revisit, self.s.block_revisit(anchor, cx, cy), (anchor.id, cx, cy),
+                False)
+        if cached:          # the graded block built here before: from the revisit cache at once, no land cover wait
+            provisional = False
+        if self.s.surface is not None and not provisional and not cached:
             # the anchor's first block is built once and kept while the player stands still: give the
             # land cover around it a moment to arrive (blocks built while driving never wait)
             # (on the map's threads: the default pool is full of the old place's road / vegetation builds after a

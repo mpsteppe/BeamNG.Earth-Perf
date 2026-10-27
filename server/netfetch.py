@@ -557,6 +557,8 @@ class Host:
         self.warned = 0.0                           # wall time of the 80 % budget warning (0 = none)
         self.warned_over = 0.0                      # ... and of the last over-budget one
         self.half_rate = False
+        self.waited = [0, 0.0, 0.0]                 # since the last summary: requests that waited for a slot or a
+                                                    # token, seconds waited in all, the longest (the net line)
 
 
 class Fetcher:
@@ -681,6 +683,34 @@ class Fetcher:
         """A request slot and a token for one attempt (raises Deferred / RateLimited). Returns the semaphore taken
         (_release gives it back)."""
         p = h.policy
+        if kind in ("urgent", "demand"):
+            t0 = time.monotonic()
+            try:
+                return self._acquire_waiting(h, url, kind)
+            finally:
+                self._note_wait(h, time.monotonic() - t0)
+        if not h.sem.acquire(blocking=False):
+            self._bump(h, "deferred")
+            raise Deferred(f"{h.name}: busy, {kind} dropped", url, h.name)
+        reserve = PREFETCH_RESERVE if kind == "prefetch" else BACKGROUND_RESERVE
+        if not h.bucket.try_take(reserve):
+            h.sem.release()
+            self._bump(h, "deferred")
+            raise Deferred(f"{h.name}: bucket low, {kind} dropped", url, h.name)
+        return h.sem
+
+    WAIT_NOTE_S = 0.05      # a wait this long or longer counts in the net line's "waited"
+
+    def _note_wait(self, h, dt):
+        if dt >= self.WAIT_NOTE_S:
+            with self._lock:
+                w = h.waited
+                w[0], w[1], w[2] = w[0] + 1, w[1] + dt, max(w[2], dt)
+
+    def _acquire_waiting(self, h, url, kind):
+        """_acquire for urgent and demand requests: they wait for a slot and a token (raise RateLimited past
+        max_wait)."""
+        p = h.policy
         if kind == "urgent":
             sem = h.urgent_sem if h.urgent_sem.acquire(blocking=False) else h.sem
             if sem is h.sem and not h.sem.acquire(timeout=p.max_wait):
@@ -698,15 +728,6 @@ class Fetcher:
                 wait = h.bucket.wait_time()
                 raise RateLimited(f"{h.name}: rate limited for {wait:.1f} s", url, h.name, retry_after=wait)
             return h.sem
-        if not h.sem.acquire(blocking=False):
-            self._bump(h, "deferred")
-            raise Deferred(f"{h.name}: busy, {kind} dropped", url, h.name)
-        reserve = PREFETCH_RESERVE if kind == "prefetch" else BACKGROUND_RESERVE
-        if not h.bucket.try_take(reserve):
-            h.sem.release()
-            self._bump(h, "deferred")
-            raise Deferred(f"{h.name}: bucket low, {kind} dropped", url, h.name)
-        return h.sem
 
     def _admit(self, url, kind):
         """Everything before the network: (Host, is_probe). The caller then _acquire()s per attempt."""
@@ -952,10 +973,14 @@ class Fetcher:
                 if any(m.values()):
                     extra = ", ".join(f"{k} {m[k]}" for k in ("s404", "s429", "s3xx", "s5xx", "errors", "retries",
                                                                "deferred", "unavailable", "trips") if m[k])
+                    w = h.waited
+                    if w[0]:        # (Finnish fork: the time requests stood waiting on this host's caps)
+                        extra += (", " if extra else "") + f"waited {w[0]}x {w[1]:.1f} s, longest {w[2]:.1f} s"
                     parts.append(f"{h.name} {m['requests']} req {m['bytes'] / 1e6:.1f} MB"
                                  + (f" ({extra})" if extra else "") + f", today {h.day['requests']}")
                 if reset:
                     h.minute = dict.fromkeys(COUNTERS, 0)
+                    h.waited = [0, 0.0, 0.0]
         down = self.unavailable_hosts()
         if down:
             parts.append("circuit open: " + ", ".join(down))

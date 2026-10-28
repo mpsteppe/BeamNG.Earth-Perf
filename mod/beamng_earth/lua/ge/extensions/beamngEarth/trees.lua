@@ -18,7 +18,7 @@ M.RINGS = { { 300, 1.0 }, { 700, 0.6 }, { 1500, 0.35 }, { 1e9, 0.2 } }   -- tile
 -- on the GPU, and the engine's tick hitched at every tile change while driving: 19.8 fps over a drive, 38.4 with trees
 -- off; 2026-10-20). Cities and farmland stay under it (Columbia: ~540 a tile).
 M.TILE_CAP = { { 300, 6000 }, { 700, 2400 }, { 1500, 900 }, { 1e9, 400 } }
--- The Finnish fork: a lighter world (server BNGE_LIGHT=1, hello.light): fewer trees past 300 m, for A/B drives and
+-- Perf: a lighter world (server BNGE_LIGHT=1, hello.light): fewer trees past 300 m, for A/B drives and
 -- weaker PCs (2026-10-28: on new ground the trees' Lua took ~0.6 ms a frame, plus the engine's per-shape item cost)
 local FULL = { rings = M.RINGS, cap = M.TILE_CAP }
 local LIGHT = { rings = { { 300, 1.0 }, { 700, 0.35 }, { 1500, 0.2 }, { 1e9, 0.1 } },
@@ -831,7 +831,7 @@ function M.update(anchorId, player, view, frameMs)
   end
 end
 
--- The Finnish fork, 2026-10-28 (traceStutter): a tree frame that made a shape's item type and first item cost the
+-- Perf, 2026-10-28 (traceStutter): a tree frame that made a shape's item type and first item cost the
 -- engine's tick ~50 ms (twice at 160-230 mph). While the world loads (the governor's loading frames) every catalog
 -- shape's spellings get their item types and one tiny item far under the ground in a Forest of their own, one
 -- spelling a frame, so a drive finds them loaded. The items stay (the shapes stay loaded).

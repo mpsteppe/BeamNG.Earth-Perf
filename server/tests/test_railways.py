@@ -361,7 +361,7 @@ class RailwayTest(unittest.TestCase):
             self.assertIn("rail", roads.shape_files(1, 0, 0))
 
     def test_lean_collision_mesh(self):
-        """The ballast bed collides (railcol, collision only); the rails and sleepers only render (the Finnish fork,
+        """The ballast bed collides (railcol, collision only); the rails and sleepers only render (perf,
         2026-10-28: a 2.2 MB rail tile colliding whole was a 63-72 ms frame)."""
         f = features([[(-50.0, 100.0), (300.0, 100.0)]], ["standard_gauge"], subtypes=["rail"])
         mesh = railways.tile_mesh(FRAME, 0, 0, [f], flat)

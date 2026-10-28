@@ -1,4 +1,4 @@
--- Ground probe around a rebase or a terrain-follow commit (the Finnish fork, 2026-10-28: at 158 mph the road turned
+-- Ground probe around a rebase or a terrain-follow commit (perf, 2026-10-28: at 158 mph the road turned
 -- bumpy ~3 s after a rebase and the car crashed; the 1 s trace samples could not say why). Just before the change,
 -- just after it, and every SAMPLE_S for WATCH_S after it, the ground is read at AHEAD_M along the car's heading,
 -- relative to the car's own ground (so the readings compare across the rebase's change of frame), with the car's

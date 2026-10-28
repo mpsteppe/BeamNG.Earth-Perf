@@ -57,7 +57,7 @@ def split(share=SERVER_SHARE):
         pass
     server = {c for _, cpus in cores[-k:] for c in cpus}
     game = {c for _, cpus in cores[:-k] for c in cpus}
-    # (the Finnish fork: BNGE_SERVER_CPUS / BNGE_GAME_CPUS="0-7,12" name the CPUs outright, for A/B drives on the
+    # (perf: BNGE_SERVER_CPUS / BNGE_GAME_CPUS="0-7,12" name the CPUs outright, for A/B drives on the
     # i7-12700K: FPS at speed fell with the server's load on its own cores, 2026-10-28; E-cores busy are suspected)
     server = cpu_list(os.environ.get("BNGE_SERVER_CPUS", "")) or server
     game = cpu_list(os.environ.get("BNGE_GAME_CPUS", "")) or game

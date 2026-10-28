@@ -93,7 +93,9 @@ MOD_TO_SERVER = {
               # a reconnect: the pooled far-tile slots [[slot, serial], ...] the mod's objects hold for that session
               "slotSession": F(str, OPT), "slotsHeld": F((list, dict), OPT),
               # the mod reads a vegetation tile as one flat array (veg_tile's data: {groups, stride, flat}; trees.lua)
-              "vegFlat": F(bool, OPT)},
+              "vegFlat": F(bool, OPT),
+              # the far tiles' pooled Materials it holds, for a restarted server to take over (satmat.pool)
+              "farPool": F(dict, OPT)},
     "prepare_anchor": {"requestId": F(int), "lat": F(NUM), "lon": F(NUM), "cx": F(NUM, OPT), "cy": F(NUM, OPT),
                        # 2026-10-22: the player's spot when not the origin (BeamMP: onto another player's anchor)
                        "px": F(NUM, OPT), "py": F(NUM, OPT),
@@ -112,7 +114,9 @@ MOD_TO_SERVER = {
              # pooled far-tile slots whose far_tile's object is gone: [[slot, serial], ...] (matslots.py)
              "slotsGone": F((list, dict), OPT),
              # other vehicles' collision foci [{x, y, r, trees}] (collisionfoci.lua; earthd parse_foci)
-             "foci": F((list, dict), OPT)},
+             "foci": F((list, dict), OPT),
+             # hello.farPool's names no longer shown: {tag, n} (satmat.takeFreed; matslots.unreserve)
+             "farPoolFreed": F(dict, OPT)},
     # the download cache (cache.py; additive): the page's size cap (GB, 0 = unlimited), a clear, or
     # neither (fresh usage numbers); always answered with a 'cache'
     "cache": {"capGb": F(NUM, OPT), "clear": F(bool, OPT)},
@@ -166,6 +170,7 @@ SERVER_TO_MOD = {
     "map_tiles_ready": {"tiles": F(list)},  # [z, x, y, ok, layer] each: written to <user>/temp/beamngEarth/maptiles
     "hello": {"protocol": F(int), "format": F(int), "serverVersion": F(str), "appVersion": F(str), "sessionId": F(str),
               "farFormat": F(str), "material": F(str),
+              "light": F(bool, OPT), "budget": F(NUM, OPT),     # perf: BNGE_LIGHT=1, BNGE_FRAME_BUDGET (A/B options)
               "nearVisual": F(str), "attribution": F(str),          # protocol 4
               "cells": F(int, OPT),             # v1.4 M1: cells per tile edge, FORMAT 4 only
               "blockSize": F(int, OPT),         # v1.4 M4: terrain block size, only when not 1024 (--block 512)

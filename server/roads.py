@@ -4862,7 +4862,7 @@ def sound_boxes(chunks):
     return out + rows.ravel().tolist()
 
 
-# The Finnish fork, 2026-10-28: a railway tile's mesh (up to 2.2 MB: every sleeper a box) collided whole, and making it
+# Perf, 2026-10-28: a railway tile's mesh (up to 2.2 MB: every sleeper a box) collided whole, and making it
 # was one 63-72 ms frame (traceFirsts2). Its collision is the ballast bed and decks alone; rails, sleepers and piers
 # only render.
 RAIL_RENDER_ONLY = ("bne_rail_steel", "bne_rail_sleeper", "bne_rail_steel_old", "bne_rail_sleeper_old")

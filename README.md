@@ -7,6 +7,9 @@ real curvature of the Earth.
 Status: beta (see VERSION). Tested on BeamNG.drive 0.40.3 on Linux (Vulkan) and the Steam Deck. See
 [docs/ROADMAP.md](docs/ROADMAP.md) for what is coming.
 
+> **This is the performance branch** of 1.7.0-beta: the same mod and app, with GC pacing and stutter fixes measured
+> in game (78 → ~105 fps while driving in our tests). What changed, why and the numbers: [PERF.md](PERF.md).
+
 **Community:** join the TGForever Discord, **[discord.gg/tgf](https://discord.gg/tgf)**, and head to the
 #beamng-earth channel to chat about the mod, get help, report bugs, help with its development, and get an IP to join a
 BeamMP.Earth server (see [Multiplayer](#multiplayer-beammp)).

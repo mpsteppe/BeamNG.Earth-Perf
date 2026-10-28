@@ -45,7 +45,7 @@ M.RELOAD_EVERY_S = 6
 -- lean collision mesh "bldcol") are made once its centre is within COLLIDE_LEAD_S of driving (COLLIDE_M min / max)
 -- and dropped again UNCOLLIDE_M beyond that. The drawn building meshes only render when the tile has a bldcol.
 M.TILE_M = 256
--- The Finnish fork, 2026-10-28: { 320, 1200 } and 9 s (were 2000 and 14 s). A rebuild costs ~0.15-0.31 ms per 1k
+-- Perf, 2026-10-28: { 320, 1200 } and 9 s (were 2000 and 14 s). A rebuild costs ~0.15-0.31 ms per 1k
 -- colliding triangles loaded (docs/ARCHITECTURE.md), and at 180-230 mph each one was a 50-106 ms frame (traceGC: the
 -- roads' Lua plus PhysicsAndVLUA), with ~2.5 km of tiles ahead colliding. URGENT_S still makes anything solid in time.
 M.COLLIDE_M = { 320, 1200 }
@@ -514,7 +514,7 @@ function M.onTile(msg, currentAnchor)
   -- a lean collision mesh ("bldcol", "walkcol": server cdae collision_only) makes the drawn ones render-only
   local lean = type(data.bldcol) == 'table' and data.bldcol.shape ~= nil
   local leanWalk = type(data.walkcol) == 'table' and data.walkcol.shape ~= nil
-  local leanRail = type(data.railcol) == 'table' and data.railcol.shape ~= nil    -- (the Finnish fork: server rail_collision)
+  local leanRail = type(data.railcol) == 'table' and data.railcol.shape ~= nil    -- (perf: server rail_collision)
   -- tunnels (server roadmesh.tunnel: tubes and portals) and railway tracks (server railways.py) collide like the decks
   for _, what in ipairs({ 'walk', 'deck', 'bld', 'bld2', 'bld3', 'bld4', 'bldcol', 'walkcol', 'tunnel', 'rail', 'railcol' }) do
     local w = data[what]

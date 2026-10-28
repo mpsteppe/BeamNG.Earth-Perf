@@ -101,7 +101,7 @@ def gpu():
             _GPU = _ef.gpu_name() or "" if getattr(_ef, "VERSION", 0) >= 58 else ""
         except Exception:
             _GPU = ""
-        # (BNGE_GPU_NAME matching no card, e.g. the 3090 disabled while gaming: gpu.rs falls back to the game's own
+        # (BNGE_GPU_NAME matching no card, e.g. that card disabled while gaming: gpu.rs falls back to the game's own
         # card, whose FPS then fell with the server's load, 2026-10-28; keep the CPU path instead)
         want = os.environ.get("BNGE_GPU_NAME", "").strip().lower()
         if want and want not in _GPU.lower():

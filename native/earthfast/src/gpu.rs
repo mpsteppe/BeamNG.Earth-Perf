@@ -40,7 +40,7 @@ async fn init() -> Option<Gpu> {
         ..Default::default()
     });
     // (BNGE_GPU_NAME=<part of a name> picks that GPU, a second card the game does not render on:
-    // the user's spare RTX 3090 beside the game's RTX 5080, 2026-10-27; none matching: the usual choice)
+    // e.g. a spare card beside the one the game draws with; none matching: the usual choice)
     let named = std::env::var("BNGE_GPU_NAME").ok().filter(|v| !v.trim().is_empty()).and_then(|want| {
         let want = want.trim().to_lowercase();
         instance

@@ -831,8 +831,8 @@ local function onMessage(msg)
     st.deshadow = msg.deshadow -- server-side imagery de-shadowing ('lambert' / 'full'; nil = off), shown on the settings page
     st.colormatch = msg.colormatch -- server-side imagery colour-seam removal ('s2'; nil = off), likewise
     seasonlook.setMode(msg.season) -- the imagery's season (server --season): the leaves follow it
-    trees.setLight(msg.light == true) -- the Finnish fork: a lighter world (server BNGE_LIGHT=1)
-    M.setBudgetScale(tonumber(msg.budget) or 1) -- ... and smaller per-frame budgets (server BNGE_BUDGET=<scale>)
+    trees.setLight(msg.light == true) -- perf: a lighter world (server BNGE_LIGHT=1)
+    M.setBudgetScale(tonumber(msg.budget) or 1) -- ... and smaller per-frame budgets (server BNGE_FRAME_BUDGET=<scale>)
     st.mapPort = msg.mapPort -- the world map's tile endpoint on 127.0.0.1 (server/maptiles.py; nil = an older server)
     -- the download cache: the new server's usage follows its hello; it gets the page's size cap (the
     -- server keeps it for its next start too)
@@ -1704,7 +1704,7 @@ end
 -- Hitch attribution (the user, 2026-10-14: "there's definitely some performance issues sometimes"): each frame
 -- times the mod's own parts; a frame over HITCH_MS keeps them and the engine's per-subsystem breakdown, so a
 -- recorded drive (tools/autodrive_perf.py) says whether we or the engine (rendering, collision, streaming) took it.
--- The ground probe round rebases and terrain-follow commits (groundprobe.lua; the Finnish fork, 2026-10-28)
+-- The ground probe round rebases and terrain-follow commits (groundprobe.lua; perf, 2026-10-28)
 M.probe = require('beamngEarth/groundprobe')
 function M.probeRay(x, y, z) return M.groundRay(z)(x, y) end
 M.HITCH_MS = 50
@@ -1712,7 +1712,7 @@ M.HITCH_KEEP = 64
 local hitchClock = stopwatch.clock()
 M.GC_STEP_MS = tonumber(os.getenv and os.getenv('BNE_GC_STEP_MS') or '') or 1.0   -- (0 = off)
 M.GC_STEP_KB = 64       -- (module fields, not locals: core.lua is at Lua's 200 locals)
--- The Finnish fork: once a cycle ends, no steps until the heap has grown GC_GROW past what it held then (a new cycle
+-- Perf: once a cycle ends, no steps until the heap has grown GC_GROW past what it held then (a new cycle
 -- began every frame: the steps took 1.7 ms of every 12.8 ms frame standing or driving, 2026-10-28 traceEngine)
 M.GC_GROW = 0.25
 -- ... and LuaJIT's own collector told to wait until the heap is GC_PAUSE % of what it held (its default 200): resting,
@@ -2386,7 +2386,7 @@ function M.setFarBudget(ms)
   return gov:setTarget(ms)
 end
 
--- The Finnish fork: the main thread's per-frame budgets scaled by s (hello.budget, 0.25-1): far-tile streaming (the
+-- Perf: the main thread's per-frame budgets scaled by s (hello.budget, 0.25-1): far-tile streaming (the
 -- governor's target, its floor 1 ms), the trees' Lua time and the GC step. Driving into new ground spent them every
 -- frame (~2.6 ms, 137 -> ~100 fps, 2026-10-28); smaller ones trade later pop-in for frame rate. Returns s in use.
 M.BUDGET_FULL = { far = governor.DEFAULT_TARGET_MS, trees = trees.FRAME_MS, gc = M.GC_STEP_MS }

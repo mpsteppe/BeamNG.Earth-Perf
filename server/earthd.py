@@ -273,9 +273,9 @@ LIGHT_LOD_K = 2.0               # BNGE_LIGHT=1's far-field K for every level (th
 
 
 def budget_scale():
-    """BNGE_BUDGET=<0.25-1>: the mod's per-frame budgets scaled (hello.budget, core.setBudgetScale); 1 by default."""
+    """BNGE_FRAME_BUDGET=<0.25-1>: the mod's per-frame budgets scaled (hello.budget, core.setBudgetScale); 1 by default."""
     try:
-        return max(0.25, min(1.0, float(os.environ.get("BNGE_BUDGET") or 1)))
+        return max(0.25, min(1.0, float(os.environ.get("BNGE_FRAME_BUDGET") or 1)))
     except ValueError:
         return 1.0
 WORKERS = 3                     # far-tile workers (--workers)
@@ -4596,7 +4596,7 @@ async def main_async(args):
             log.warning("the game writes shape version 0x%08x, this server 0x%08x: using DAE far tiles",
                         v, cdae.VERSION_WORD)
             fmt = "dae"
-    # (the Finnish fork: BNGE_LIGHT=1, a lighter world for A/B drives and weaker PCs: coarser far tiles, and the mod
+    # (perf: BNGE_LIGHT=1, a lighter world for A/B drives and weaker PCs: coarser far tiles, and the mod
     # thins its trees (hello.light, trees.setLight), 2026-10-28)
     if args.lod_k is None and os.environ.get("BNGE_LIGHT") == "1":
         args.lod_k = LIGHT_LOD_K

@@ -541,6 +541,7 @@ local function finishRebase()
   setStatus(string.format('Anchor #%s at %.5f, %.5f (%s, %.0f ms, %.3f deg, phase 2 after %d frame(s), camera: %d points%s)%s',
     tostring(msg.anchorId), msg.lat, msg.lon, rb.purpose, st.lastRebaseMs, math.deg(xf:angle()), rb.waited,
     cs.points + cs.triples, cs.viaDebug and '' or ', no camData', ok and '' or ' TERRAIN FAILED'))
+  pcall(M.probe.after, st.clock, getPlayerVehicle(0), M.probeRay)
 end
 
 -- Is the player's move visible to GE yet (veh:getPosition, the value the camera reads at
@@ -583,6 +584,7 @@ local function commitRebase(msg, purpose)
   local moved, playerId = {}, nil
   local couplings = {}
   if not isIdentity(xf) then
+    pcall(M.probe.before, 'rebase', getPlayerVehicle(0), M.probeRay)
     holdMotionBlur()
     couplings = rebase.couplings()      -- (re-hitched after phase 2: rebase.recoupleStart)
     moved, playerId = rebase.moveVehicles(xf, geodesy)
@@ -624,6 +626,7 @@ local frameTimer = hptimer and hptimer() or nil
 
 local function commitTerrain(msg)
   local sw = stopwatch.new()
+  pcall(M.probe.before, 'terrain', getPlayerVehicle(0), M.probeRay)
   local ok, err, swapped = loadBlock(msg)
   if not ok then
     setStatus('Terrain-follow import failed: ' .. tostring(err))
@@ -636,6 +639,7 @@ local function commitTerrain(msg)
     roads.collisionRebuilt()      -- the sidewalks made so far collide now too
   end
   local tColl = sw()
+  pcall(M.probe.after, st.clock, getPlayerVehicle(0), M.probeRay)
   farfield.onBlockCommit(msg.cx, msg.cy)
   local ls = swapped and terrain.lastSwap or nil
   local c = { load = tLoad, coll = tColl - tLoad, cover = sw() - tColl, f = {}, swap = swapped or nil,
@@ -1697,6 +1701,9 @@ end
 -- Hitch attribution (the user, 2026-10-14: "there's definitely some performance issues sometimes"): each frame
 -- times the mod's own parts; a frame over HITCH_MS keeps them and the engine's per-subsystem breakdown, so a
 -- recorded drive (tools/autodrive_perf.py) says whether we or the engine (rendering, collision, streaming) took it.
+-- The ground probe round rebases and terrain-follow commits (groundprobe.lua; the Finnish fork, 2026-10-28)
+M.probe = require('beamngEarth/groundprobe')
+function M.probeRay(x, y, z) return M.groundRay(z)(x, y) end
 M.HITCH_MS = 50
 M.HITCH_KEEP = 64
 local hitchClock = stopwatch.clock()
@@ -1841,6 +1848,10 @@ local function perfFrame(ms, hrec)
       machineTryAt = st.clock + 10           -- (the game's report extension not loaded yet)
     end
   end
+  pcall(M.probe.update, st.clock, getPlayerVehicle(0), M.probeRay)
+  local pl = M.probe.take()       -- (groundprobe.lua's lines: the game's log too)
+  for _, l in ipairs(pl) do log('I', 'beamngEarth', l) end
+  if #pl > 0 and net.isConnected() then net.send({ type = 'perf_log', lines = pl }) end
   if #lines == 0 then return end
   for _, l in ipairs(lines) do log('I', 'beamngEarth', l) end
   if net.isConnected() then net.send({ type = 'perf_log', lines = lines }) end

@@ -838,6 +838,11 @@ function M.update(gov, currentAnchor, player, view)
         if not isRoad then t.cq = t.cq or {}; t.cq[q.what] = q end
         if isRoad then t[q.what] = id else
           t[q.what] = id; collisionDirty = true; newColliders[#newColliders + 1] = { id, q }
+          local pv = getPlayerVehicle and getPlayerVehicle(0)
+          if pv and t.cx then          -- (groundprobe.lua: the colliders made near the car round a rebase)
+            local pp = pv:getPosition()
+            pcall(require('beamngEarth/groundprobe').collider, q.what, math.sqrt((pp.x - t.cx) ^ 2 + (pp.y - t.cy) ^ 2))
+          end
           t.colAt = t.colAt or {}; t.colAt[q.what] = now()
         end
       else lastError = tostring(id) end

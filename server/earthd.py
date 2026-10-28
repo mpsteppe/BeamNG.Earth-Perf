@@ -3357,9 +3357,11 @@ class Connection:
             m = {"type": "hello", "protocol": PROTOCOL, "format": lay.format, "serverVersion": SERVER_VERSION,
                  "appVersion": updatesmod.local_version() or "",     # the release (VERSION): the players' reports
                  "sessionId": self.s.sid, "farFormat": self.s.far_format, "material": farfield.MATERIAL,
-                 "nearVisual": self.s.near_visual, "attribution": self.s.attribution(),
-                 "light": os.environ.get("BNGE_LIGHT") == "1",
-                 "budget": budget_scale()}
+                 "nearVisual": self.s.near_visual, "attribution": self.s.attribution()}
+            if os.environ.get("BNGE_LIGHT") == "1":     # perf A/B options, sent only when set (the mod: off when absent)
+                m["light"] = True
+            if budget_scale() < 1.0:
+                m["budget"] = budget_scale()
             if self.s.imagery is not None:      # the world map credits the sources its view shows
                 m["imageryCredits"] = self.s.imagery.credits_by_area()
                 m["otherCredits"] = self.s.attribution_rest()

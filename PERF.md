@@ -58,7 +58,9 @@ That found these, in order:
 - **Windows 11 hybrid CPUs** (`budget.py`): the below-normal server was put on the E-cores (4 E-cores at 100 %,
   P-cores idle, the ground ahead late). The server opts out of power throttling; its priority class stays.
 - **GPU by name** (`BNGE_GPU_NAME`, `gpu.rs`, `fast.py`): the server's GPU kernels on a second card the game does not
-  draw with. If no card matches, the server keeps its CPU path rather than share the game's GPU.
+  draw with. If no card matches, the server keeps its CPU path rather than share the game's GPU. Opt-in only; the
+  `earthfast` binaries in this branch are still 1.7.0's, so it needs `cargo build --release` in `native/earthfast`
+  to take effect (without the variable nothing changes).
 
 ## Options for testing (all off by default)
 
@@ -96,3 +98,7 @@ Mod Lua tests (`mod/tests/*.lua`, LuaJIT) and the server's `unittest` suite cove
 `test_satmat_pool`, `test_trees`, `test_roads`, `test_matslots`, `test_blockworker`, `test_protocol_agreement`, ...).
 `test_roads`' "then the pending rebuild runs" and "dropped tile: mesh deleted, collision reloaded" are timing tests
 that fail now and then, with or without these changes.
+
+Run the server's tests as `python -m unittest discover -s tests -t tests` in `server/` (they import each other).
+On Windows these fail on unchanged 1.7.0-beta too, so not because of this branch: `test_apppaths`, `test_bmplaunch`,
+`test_launcher_linux`, `test_netfetch` (its fake connection lacks `context`), `test_otto_bridge`.

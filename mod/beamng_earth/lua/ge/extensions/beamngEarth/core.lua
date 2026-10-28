@@ -1752,6 +1752,11 @@ local function noteHitch(frameMs)
       for i = 1, math.min(6, #arr) do h.engine[arr[i][1]] = math.floor(arr[i][2] * 10 + 0.5) / 10 end
     end
   end
+  -- what the slow parts did: the roads' units of 2 ms or more, the trees' items / Forests / item types, the Lua heap
+  h.heapMB = math.floor(collectgarbage('count') / 1024 + 0.5)
+  local okU, units = pcall(roads.takeFrameUnits)
+  if okU and units and #units > 0 then h.units = units end
+  if trees.frame and (trees.frame.items > 0 or trees.frame.forests > 0 or trees.frame.types > 0) then h.trees = trees.frame end
   hitches[#hitches + 1] = h
   if #hitches > M.HITCH_KEEP then table.remove(hitches, 1) end
   return h
@@ -1900,6 +1905,7 @@ local function onUpdate(dtReal, dtSim)
   end
   prevMarks, marks = marks, prevMarks
   for k in pairs(marks) do marks[k] = nil end
+  roads.takeFrameUnits()             -- (a frame with no hitch: its units dropped)
   local t = hitchClock()
   postfx.update(st.inOurLevel)
   local stg = rawget(_G, 'beamngEarth_settings')

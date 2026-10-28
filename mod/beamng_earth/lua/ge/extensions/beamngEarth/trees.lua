@@ -267,6 +267,7 @@ local function newForest()
   newForests = newForests + 1
   local f = createObject('Forest')
   f:registerObject(M.forestName(forestCount))
+  if M.frame then M.frame.forests = M.frame.forests + 1 end
   if scenetree.MissionGroup then scenetree.MissionGroup:addObject(f) end
   M.forests = forestCount
   return f
@@ -325,6 +326,7 @@ local function itemType(shape, solid)
     d:setField('collidable', 0, solid and '1' or '0')
     d:setField('windScale', 0, '0.4'); d:setField('branchAmp', 0, '0.1'); d:setField('detailAmp', 0, '0.2')
     d:registerObject(name)
+    if M.frame then M.frame.types = M.frame.types + 1 end
     if Sim and Sim.getDataBlockSet then Sim.getDataBlockSet():addObject(d) end
   end
   types[key] = d
@@ -444,6 +446,10 @@ local function makeItem(fd, t, i, shape, sc, solid, group, variant)
     if pair then it = pair else M.errors = M.errors + 1 end
   end
   M.made = M.made + 1
+  if M.frame then
+    M.frame.items = M.frame.items + 1
+    if (pop[shape] or 0) == 0 then M.frame.firstOf = (M.frame.firstOf or 0) + 1 end   -- a shape's first item: its load
+  end
   pop[shape] = (pop[shape] or 0) + 1
   return it
 end
@@ -456,9 +462,18 @@ end
 
 -- This frame's shapes: may an item of this shape change now? (see SHAPE_ITEMS_PER_FRAME)
 local touched, touchedItems = {}, 0
+local warmOne       -- (below M.update)
+-- A shape with no item in the level costs the engine's tick ~5-15 ms for its first one (traceWarm 2026-10-28: 24-26 of
+-- them in one loading frame were 115-130 ms frames, 2-3 while driving 30-70 ms): FIRSTS_PER_FRAME of them at most.
+M.FIRSTS_PER_FRAME = 1
+local firsts = 0
 local function allow(shape)
   if touched[shape] then return true end
   local n = pop[shape] or 0
+  if n == 0 then
+    if firsts >= M.FIRSTS_PER_FRAME then return false end
+    firsts = firsts + 1
+  end
   if next(touched) ~= nil and touchedItems + n > M.SHAPE_ITEMS_PER_FRAME then return false end
   touched[shape], touchedItems = true, touchedItems + n
   return true
@@ -641,6 +656,7 @@ local frameN = 0
 -- frameMs: this frame's Lua time for the tree work (default FRAME_MS); 0: none this frame (core: the governor's heavy
 -- frame or the quiet frames round it), the batch waits for the next frame.
 function M.update(anchorId, player, view, frameMs)
+  M.frame = { items = 0, forests = 0, types = 0 }   -- this frame's work (core's hitch records)
   if not next(tiles) then return end
   if frameMs and frameMs <= 0 then return end
   if not setup() then return end
@@ -650,7 +666,8 @@ function M.update(anchorId, player, view, frameMs)
   local limit, elapsed = frameMs or M.FRAME_MS, M.clock()
   newForests = 0
   M.lastShapeItems = touchedItems        -- the previous frame's (diagnostics)
-  touched, touchedItems = {}, 0
+  touched, touchedItems, firsts = {}, 0, 0
+  if M.WARM and frameMs == M.LOADING_FRAME_MS and warmOne() then firsts = M.FIRSTS_PER_FRAME end   -- (its first item this frame's)
   releaseGhosts(anchorId, player)
   for key, t in pairs(tiles) do
     if (t.anchor ~= anchorId and not t.ghost) or t.drop then
@@ -790,6 +807,53 @@ function M.update(anchorId, player, view, frameMs)
   end
 end
 
+-- The Finnish fork, 2026-10-28 (traceStutter): a tree frame that made a shape's item type and first item cost the
+-- engine's tick ~50 ms (twice at 160-230 mph). While the world loads (the governor's loading frames) every catalog
+-- shape's spellings get their item types and one tiny item far under the ground in a Forest of their own, one
+-- spelling a frame, so a drive finds them loaded. The items stay (the shapes stay loaded).
+M.WARM_Z = -4000
+-- Off: with it on, the game crashed in C++ ("secondary thread", GpuCull registering instances) ~1 min after loading
+-- (2026-10-28, the first run with it warming every loading frame). FIRSTS_PER_FRAME alone spreads the loads.
+M.WARM = false
+local warmList, warmNext, warmForest = nil, 1, nil
+warmOne = function()
+  if not warmList then
+    warmList = {}
+    local seen = {}
+    for _, list in pairs(M.CATALOG) do
+      for _, v in ipairs(list) do
+        for k = 0, math.max(M.SHAPE_VARIANTS, 1) - 1 do
+          local sp = spelled(v[1], k)
+          if not seen[sp] then seen[sp] = true; warmList[#warmList + 1] = sp end
+        end
+      end
+    end
+  end
+  local sh = warmList[warmNext]
+  while sh and (pop[sh] or 0) > 0 do warmNext = warmNext + 1; sh = warmList[warmNext] end   -- (loaded already)
+  if not sh then return false end
+  warmNext = warmNext + 1
+  if not warmForest then
+    local f = createObject('Forest')
+    f:registerObject(M.FOREST_NAME .. '_warm')
+    if scenetree.MissionGroup then scenetree.MissionGroup:addObject(f) end
+    warmForest = f:getID()
+  end
+  itemType(sh, true)
+  local d = itemType(sh, false)
+  local f = scenetree.findObjectById(warmForest)
+  local fd = f and f:getData()
+  if d and fd then
+    local m = MatrixF(true)
+    m:setPosition(vec3(0, 0, M.WARM_Z))
+    local ok = pcall(function() return fd:createNewItem(d, m, 0.01) end)
+    if ok then pop[sh] = (pop[sh] or 0) + 1 end     -- (never removed: the shape never back at 0)
+  end
+  return true
+end
+-- How many catalog spellings are still to be warmed (diagnostics, tests).
+function M.warmLeft() return warmList and (#warmList - warmNext + 1) or nil end
+
 -- Disconnect, a new server session, mod unload: every item removed.
 function M.clear()
   for _, t in pairs(tiles) do
@@ -804,6 +868,7 @@ end
 -- Level end: the level deletes its objects itself.
 function M.reset()
   tiles, types, ready, pool, forestCount, pop = {}, {}, false, {}, 0, {}
+  warmList, warmNext, warmForest = nil, 1, nil
 end
 
 function M.status()

@@ -45,8 +45,11 @@ M.RELOAD_EVERY_S = 6
 -- lean collision mesh "bldcol") are made once its centre is within COLLIDE_LEAD_S of driving (COLLIDE_M min / max)
 -- and dropped again UNCOLLIDE_M beyond that. The drawn building meshes only render when the tile has a bldcol.
 M.TILE_M = 256
-M.COLLIDE_M = { 320, 2000 }
-M.COLLIDE_LEAD_S = 14
+-- The Finnish fork, 2026-10-28: { 320, 1200 } and 9 s (were 2000 and 14 s). A rebuild costs ~0.15-0.31 ms per 1k
+-- colliding triangles loaded (docs/ARCHITECTURE.md), and at 180-230 mph each one was a 50-106 ms frame (traceGC: the
+-- roads' Lua plus PhysicsAndVLUA), with ~2.5 km of tiles ahead colliding. URGENT_S still makes anything solid in time.
+M.COLLIDE_M = { 320, 1200 }
+M.COLLIDE_LEAD_S = 9
 M.UNCOLLIDE_M = 350
 M.COLLIDE_CHECK_S = 0.25
 M.RELOAD_DELETES_S = 30
@@ -231,13 +234,23 @@ local function now() return os.clock() * 1000 end
 local unitStats = {}
 local unitLog = {}       -- the last UNIT_LOG units: { kind, ms, shape } (status().unitLog)
 M.UNIT_LOG = 400
+local frameUnits = {}    -- this frame's units of FRAME_UNIT_MS or more (M.takeFrameUnits: core's hitch records)
+M.FRAME_UNIT_MS = 2
 local function noteUnit(kind, ms, shape)
+  if ms >= M.FRAME_UNIT_MS then frameUnits[#frameUnits + 1] = kind .. ' ' .. math.floor(ms + 0.5) end
   unitLog[#unitLog + 1] = { kind, ms, shape }
   if #unitLog > M.UNIT_LOG then table.remove(unitLog, 1) end
   local u = unitStats[kind]
   if not u then u = { n = 0, ms = 0, max = 0 }; unitStats[kind] = u end
   u.n, u.ms = u.n + 1, u.ms + ms
   if ms > u.max then u.max = ms end
+end
+
+-- The units noted since the last call ({"kind ms", ...}), and a fresh list.
+function M.takeFrameUnits()
+  local out = frameUnits
+  frameUnits = {}
+  return out
 end
 
 local function dropTile(key)

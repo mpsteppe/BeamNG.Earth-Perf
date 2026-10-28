@@ -43,6 +43,8 @@ trees.EVERY_N = 1               -- (every update works here; the batching is tes
 -- (no time budget, no spare Forests: both tested at the end)
 local FRAME_MS, POOL_SPARE = trees.FRAME_MS, trees.POOL_SPARE
 trees.FRAME_MS, trees.POOL_SPARE = math.huge, 0
+local FIRSTS = trees.FIRSTS_PER_FRAME
+trees.FIRSTS_PER_FRAME = math.huge   -- (tested at the end)
 local function count() local n = 0; for _ in pairs(items) do n = n + 1 end; return n end
 
 -- the variant: a height inside its range, scaled to it
@@ -423,5 +425,39 @@ do
   T.check(count() == 2, 'rocks on again: back')
   trees.clear()
 end
+-- the shapes warmed only in the world's loading frames, one spelling a frame (no tile's items touched)
+do
+  trees.WARM = true
+  trees.onTile({ anchorId = 1, key = '9_9', path = '/t/v.json', n = 100 }, 1)
+  trees.update(1, { x = 9 * 256, y = 9 * 256 })
+  local before = count()
+  T.check(trees.warmLeft() == nil, 'no warming outside the loading frames')
+  trees.update(1, { x = 9 * 256, y = 9 * 256 }, nil, trees.LOADING_FRAME_MS)
+  local left = trees.warmLeft()
+  T.check(left and left > 0, 'loading: a spelling warmed')
+  trees.update(1, { x = 9 * 256, y = 9 * 256 }, nil, trees.LOADING_FRAME_MS)
+  T.check(trees.warmLeft() == left - 1, 'one a frame')
+  T.check(count() == before + 2, 'one tiny item each')
+  trees.clear()
+  trees.WARM = false
+end
+-- a shape's first item in the level: FIRSTS_PER_FRAME a frame (its load); the shapes already in, unlimited
+do
+  trees.reset()
+  trees.FIRSTS_PER_FRAME = 1
+  local mixed = {}
+  for i = 0, 39 do mixed[#mixed + 1] = string.format('{%d, %d, 10, %.1f, 0, 1, 12, %.2f}', i % 2, i, 2 + (i % 4) * 6, i / 40) end
+  files['/t/m.json'] = '{ groups = { "deciduous", "conifer" }, items = { ' .. table.concat(mixed, ', ') .. ' } }'
+  trees.onTile({ anchorId = 1, key = '20_20', path = '/t/m.json', n = 40 }, 1)
+  local p = { x = 20 * 256, y = 20 * 256 }
+  local before = count()
+  trees.update(1, p)
+  local first = count() - before
+  for _ = 1, 20 do trees.update(1, p) end
+  T.check(first > 0 and first < 40 and count() - before == 40, 'one new shape a frame, all made in the end')
+  trees.clear()
+  trees.FIRSTS_PER_FRAME = math.huge
+end
+trees.FIRSTS_PER_FRAME = FIRSTS
 trees.FRAME_MS, trees.POOL_SPARE = FRAME_MS, POOL_SPARE
 T.done('test_trees')

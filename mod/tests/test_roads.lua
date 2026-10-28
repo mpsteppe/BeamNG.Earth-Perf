@@ -374,7 +374,7 @@ do
   T.check(roads.radiusToward(p, 0, 1500, 1400, east) == roads.COLLIDE_M[1], 'beside it: the minimum')
   T.check(roads.radiusToward(p, -100, 50, 1400, east) == 1400, 'its own tile: the full reach')
   T.check(roads.radiusToward(p, -1500, 0, 1400, nil) == 1400, 'slow (no direction): all round')
-  T.check(roads.collideRadius(100) == 1400 and roads.collideRadius(500) == roads.COLLIDE_M[2], 'reach: 14 s of driving, capped')
+  T.check(roads.collideRadius(100) == 900 and roads.collideRadius(500) == roads.COLLIDE_M[2], 'reach: 9 s of driving, capped')
 end
 
 -- the skyline: a 1 km square is covered once all 16 of its far tiles are here (no hole while they arrive)

@@ -466,4 +466,10 @@ do
 end
 trees.FIRSTS_PER_FRAME = FIRSTS
 trees.FRAME_MS, trees.POOL_SPARE = FRAME_MS, POOL_SPARE
+-- the ground probe's scene line (groundprobe.lua) runs on whatever is loaded
+do
+  local ok, s = pcall(trees.sceneNear, 0, 0)
+  T.check(ok and type(s) == 'string', 'sceneNear: a line ' .. tostring(s))
+end
+
 T.done('test_trees')

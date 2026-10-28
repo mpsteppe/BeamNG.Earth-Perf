@@ -29,9 +29,21 @@ P.collider('walk', 40)
 P.collider('bldcol', 900)                   -- (too far: not listed)
 P.update(0.1, veh, ray)
 T.check(#P.take() == 0, 'no sample before SAMPLE_S')
+-- the scene round the car from roads / trees (stubbed here), with a sample every SCENE_S after a rebase
+package.loaded['beamngEarth/roads'] = { sceneNear = function(x, y) return 'roads at ' .. x end }
+package.loaded['beamngEarth/trees'] = { sceneNear = function() error('boom') end }
 P.update(0.3, veh, ray)
 l = P.take()
-T.check(#l == 1 and l[1]:find('probe rebase %+0.30s') ~= nil, 'a sample every SAMPLE_S')
+T.check(#l == 3 and l[1]:find('probe rebase %+0.30s: agl') ~= nil, 'a sample every SAMPLE_S')
+T.check(l[2]:find('probe rebase %+0.30s roads: roads at 0') ~= nil and l[3]:find('trees: error') ~= nil,
+  'and the scene, an error reported as such')
+P.note('roads ghost 2:0_0 released (covered)')
+l = P.take()
+T.check(#l == 1 and l[1]:find('probe rebase %+0.30s: roads ghost 2:0_0 released') ~= nil, 'a note while watching')
+P.update(0.6, veh, ray)
+T.check(#P.take() == 1, 'no scene again before SCENE_S')
+P.update(0.9, veh, ray)
+T.check(#P.take() == 3, 'then the scene again')
 P.update(P.WATCH_S + 1, veh, ray)
 l = P.take()
 T.check(#l == 1 and l[1]:find('colliders near the car: walk 40 m') ~= nil and l[1]:find('bldcol') == nil,
@@ -42,5 +54,7 @@ T.check(#P.take() == 0, 'nothing more')
 
 P.after(10, veh, ray)
 T.check(#P.take() == 0, 'after without before: nothing')
+P.note('x')
+T.check(#P.take() == 0, 'no notes when not watching')
 
 T.done('test_groundprobe')

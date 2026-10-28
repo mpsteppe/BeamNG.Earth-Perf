@@ -745,7 +745,12 @@ local function releaseGhosts(player)
       -- ghost looked kilometres away and all went: 46 road tiles -> 0 at each rebase, 2026-10-17)
       local far = p and t.cx and ghostSince() > M.GHOST_FAR_WAIT_S * 1000
         and math.max(math.abs(p.x - t.cx), math.abs(p.y - t.cy)) - M.TILE_M / 2 > M.GHOST_FAR_M
-      if all or far or (t.cx and covered(done, t.cx, t.cy)) then
+      local cov = not (all or far) and t.cx and covered(done, t.cx, t.cy)
+      if all or far or cov then
+        if p and t.cx and math.max(math.abs(p.x - t.cx), math.abs(p.y - t.cy)) < 1.5 * M.TILE_M then
+          pcall(require('beamngEarth/groundprobe').note, string.format('roads ghost %s released (%s), road %s',
+            key, all and 'max age' or far and 'far' or 'covered', t.road and 'shown' or 'none'))
+        end
         dropTile(key)
         collisionDirty = true
       else left = true end
@@ -762,6 +767,27 @@ local function releaseGhosts(player)
     end
   end
   if not left then ghostSince = nil end
+end
+
+-- The road tiles round (x, y) for the ground probe (groundprobe.lua, after a rebase): each as key, "ghost" or "new"
+-- (the current anchor's) or "old", whether its road mesh / sidewalk collider exist, its chunks still queued and its
+-- entries waiting in walkQ / parked / held.
+function M.sceneNear(x, y)
+  local n, wait = M.TILE_M, {}
+  for name, list in pairs({ w = walkQ, p = parked, h = held }) do
+    for _, q in ipairs(list) do wait[q.key] = (wait[q.key] or '') .. name .. ':' .. tostring(q.what) .. ' ' end
+  end
+  local function has(id) return id and scenetree.findObjectById(id) and 'y' or '-' end
+  local parts = {}
+  for key, t in pairs(tiles) do
+    if t.cx and math.abs(t.cx - x) < 1.5 * n and math.abs(t.cy - y) < 1.5 * n then
+      parts[#parts + 1] = string.format('%s %s road %s walkcol %s deck %s q %d%s', key,
+        t.ghost and 'ghost' or (t.anchor == anchorId and 'new' or 'old'), has(t.road), has(t.walkcol), has(t.deck),
+        t.queued or 0, wait[key] and (' wait ' .. wait[key]) or '')
+    end
+  end
+  table.sort(parts)
+  return string.format('anchor %s, %d deleting; ', tostring(anchorId), #deleteQ) .. table.concat(parts, '; ')
 end
 
 -- Once per frame (core onUpdate): deletions, then creations, within the governor's budget.

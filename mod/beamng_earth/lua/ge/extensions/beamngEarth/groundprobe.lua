@@ -4,10 +4,14 @@
 -- relative to the car's own ground (so the readings compare across the rebase's change of frame), with the car's
 -- height above the ground, its speed and climb rate, and the colliders made near the car (M.collider, from roads.lua).
 -- Lines go to the server log through core (perf_log), tagged "probe".
+-- After a rebase, every SCENE_S also the scene round the car (roads.sceneNear, trees.sceneNear: which tiles are ghosts
+-- or the new anchor's, and whether their meshes are made), and every ghost released near the car (M.note): the user saw
+-- the road turn to painted ground and the trees go for a few seconds after rebases, and a scan 15 s later found all fine.
 local M = {}
 
 M.AHEAD_M = { 0, 25, 50, 100, 200 }
-M.WATCH_S = 5.0
+M.WATCH_S = 10.0
+M.SCENE_S = 0.5
 M.SAMPLE_S = 0.25
 M.NEAR_M = 150          -- colliders made this close to the car are listed
 M.JUMP_M = 0.3          -- a reading this far off the one before the change is flagged (a step in the ground)
@@ -53,7 +57,7 @@ function M.before(kind, veh, ray)
   if not veh or not ray then return end
   local ok, r = pcall(readings, veh, ray)
   if not ok then return end
-  active = { kind = kind, before = r, colliders = {} }
+  active = { kind = kind, before = r, colliders = {}, sceneAt = -1 }
   out[#out + 1] = string.format('probe %s before: %s', kind, fmt(r))
 end
 
@@ -82,6 +86,21 @@ function M.update(clock, veh, ray)
   if ok then
     out[#out + 1] = string.format('probe %s +%.2fs: %s', active.kind, clock - active.at, fmt(r, active.before))
   end
+  if active.kind == 'rebase' and clock - active.sceneAt >= M.SCENE_S - 1e-6 then
+    active.sceneAt = clock
+    local p = veh:getPosition()
+    for _, name in ipairs({ 'roads', 'trees' }) do
+      local okS, s = pcall(function() return require('beamngEarth/' .. name).sceneNear(p.x, p.y) end)
+      out[#out + 1] = string.format('probe %s +%.2fs %s: %s', active.kind, clock - active.at, name,
+        okS and tostring(s) or ('error ' .. tostring(s)))
+    end
+  end
+end
+
+-- Something that happened near the car while the watch runs (a ghost released: roads.lua, trees.lua).
+function M.note(text)
+  if not active or not active.at then return end
+  out[#out + 1] = string.format('probe %s +%.2fs: %s', active.kind, (active.now or active.at) - active.at, text)
 end
 
 -- A collider made (roads.lua): what, and its distance from the car (m).

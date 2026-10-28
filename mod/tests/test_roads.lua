@@ -390,4 +390,10 @@ do
   for i = -4, -1 do for j = 4, 7 do s2['1:' .. i .. '_' .. j] = true end end
   T.check(roads.skyCovered(s2, 1, -1, 1), 'skyCovered: negative squares')
 end
+-- the ground probe's scene line (groundprobe.lua) runs on whatever is loaded
+do
+  local ok, s = pcall(roads.sceneNear, 0, 0)
+  T.check(ok and type(s) == 'string', 'sceneNear: a line ' .. tostring(s))
+end
+
 T.done('test_roads')

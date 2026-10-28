@@ -643,10 +643,30 @@ releaseGhosts = function(anchorId, player)
           end
         end
       end
-      if ok then t.drop = true else left = true end
+      if ok then
+        t.drop = true
+        if player and math.abs(player.x - t.cx) < 384 and math.abs(player.y - t.cy) < 384 then
+          pcall(require('beamngEarth/groundprobe').note, string.format('trees ghost at %.0f,%.0f released (%s), %d shown',
+            t.cx, t.cy, all and 'max age' or 'far or covered', t.shown or 0))
+        end
+      else left = true end
     end
   end
   if not left then ghostSince = nil end
+end
+
+-- The tree tiles round (x, y) for the ground probe (groundprobe.lua, after a rebase): ghosts and the current anchor's
+-- tiles within a tile and a half, with their items shown and whether still filling.
+function M.sceneNear(x, y)
+  local parts = {}
+  for key, t in pairs(tiles) do
+    if t.cx and math.abs(t.cx - x) < 384 and math.abs(t.cy - y) < 384 then
+      parts[#parts + 1] = string.format('%s %s%s shown %d%s', key, t.ghost and 'ghost' or 'tile', t.drop and ' drop' or '',
+        t.shown or 0, t.pending and ' pending' or '')
+    end
+  end
+  table.sort(parts)
+  return table.concat(parts, '; ')
 end
 
 -- Every frame: tiles of other anchors and dropped ones emptied, the others filled / thinned to their

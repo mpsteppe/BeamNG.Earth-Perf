@@ -219,6 +219,37 @@ end
 frames(1)
 T.check(uiShows('Imagery: test credits'), 'the server\'s attribution line is shown (hello.attribution)')
 T.check(not warned('material'), 'hello: the server\'s far-tile material is the one the mod ships')
+do -- hello.budget scales the per-frame budgets (core.setBudgetScale); none: full
+  local trees = require('beamngEarth/trees')
+  T.check(core.budgetScale == 1 and trees.FRAME_MS == core.BUDGET_FULL.trees, 'no hello.budget: full budgets')
+  core.setBudgetScale(0.5)
+  T.check(trees.FRAME_MS == core.BUDGET_FULL.trees / 2 and core.GC_STEP_MS == core.BUDGET_FULL.gc / 2,
+    'budget 0.5: half the trees\' and the GC\'s time')
+  T.check(core.setBudgetScale(0.01) == 0.25 and core.setBudgetScale(9) == 1, 'budget scale kept within 0.25-1')
+end
+do -- core.gcStep: steps until a cycle ends, then rests until the heap grows GC_GROW past it
+  local kb, steps, cycleAfter, pause = 1000, 0, 3, nil
+  local function cg(op, arg)
+    if op == 'count' then return kb end
+    if op == 'setpause' then pause = arg return 200 end
+    steps = steps + 1
+    return steps % cycleAfter == 0          -- every third step ends a cycle
+  end
+  local now = 0
+  local function clock() now = now + 0.1 return now end
+  core.gcRestKB, core.gcPaused = nil, nil
+  T.check(core.gcStep(1e9, clock, cg) and steps == 3, 'gcStep: steps until the cycle ends')
+  T.check(pause == core.GC_PAUSE, 'gcStep: LuaJIT\'s own collector told to wait (setpause)')
+  T.check(core.gcRestKB == 1000 * (1 + core.GC_GROW), 'gcStep: rests until the heap grows GC_GROW')
+  T.check(not core.gcStep(1e9, clock, cg) and steps == 3, 'gcStep: no step while the heap is under it')
+  kb = 1300
+  T.check(core.gcStep(1e9, clock, cg) and steps == 6, 'gcStep: steps again once it grew')
+  cycleAfter, steps, core.gcRestKB = 1e9, 0, nil
+  now = 0
+  core.gcStep(0.35, clock, cg)
+  T.check(steps == 4 and core.gcRestKB == nil, 'gcStep: stops at its time budget mid-cycle, goes on next frame')
+  core.gcRestKB = nil
+end
 T.check(crossover.cells() == 32 and farfield.stats().exactLevel == -2,
   'FORMAT 3 hello (no cells): 32-cell tiles, exact level L-2 (v1.3.1)')
 local req = received('prepare_anchor')[1]

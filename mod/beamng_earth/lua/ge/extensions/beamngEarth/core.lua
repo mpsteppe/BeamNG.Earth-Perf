@@ -825,6 +825,8 @@ local function onMessage(msg)
     st.deshadow = msg.deshadow -- server-side imagery de-shadowing ('lambert' / 'full'; nil = off), shown on the settings page
     st.colormatch = msg.colormatch -- server-side imagery colour-seam removal ('s2'; nil = off), likewise
     seasonlook.setMode(msg.season) -- the imagery's season (server --season): the leaves follow it
+    trees.setLight(msg.light == true) -- the Finnish fork: a lighter world (server BNGE_LIGHT=1)
+    M.setBudgetScale(tonumber(msg.budget) or 1) -- ... and smaller per-frame budgets (server BNGE_BUDGET=<scale>)
     st.mapPort = msg.mapPort -- the world map's tile endpoint on 127.0.0.1 (server/maptiles.py; nil = an older server)
     -- the download cache: the new server's usage follows its hello; it gets the page's size cap (the
     -- server keeps it for its next start too)
@@ -1700,6 +1702,32 @@ M.HITCH_KEEP = 64
 local hitchClock = stopwatch.clock()
 M.GC_STEP_MS = tonumber(os.getenv and os.getenv('BNE_GC_STEP_MS') or '') or 1.0   -- (0 = off)
 M.GC_STEP_KB = 64       -- (module fields, not locals: core.lua is at Lua's 200 locals)
+-- The Finnish fork: once a cycle ends, no steps until the heap has grown GC_GROW past what it held then (a new cycle
+-- began every frame: the steps took 1.7 ms of every 12.8 ms frame standing or driving, 2026-10-28 traceEngine)
+M.GC_GROW = 0.25
+-- ... and LuaJIT's own collector told to wait until the heap is GC_PAUSE % of what it held (its default 200): resting,
+-- it began cycles of its own and their last pass on a ~175 MB heap took one 100-156 ms frame (traceGC). Set again at
+-- every cycle's end (the engine may set it too).
+M.GC_PAUSE = 400
+-- One frame's GC steps until clock() reaches gcEnd or a cycle ends; nothing while the heap is under M.gcRestKB.
+-- cg: collectgarbage (tests pass their own). Returns whether it stepped.
+function M.gcStep(gcEnd, clock, cg)
+  cg = cg or collectgarbage
+  if not M.gcPaused then
+    cg('setpause', M.GC_PAUSE)
+    M.gcPaused = true
+  end
+  if M.gcRestKB and cg('count') < M.gcRestKB then return false end
+  M.gcRestKB = nil
+  repeat
+    if cg('step', M.GC_STEP_KB) then
+      M.gcRestKB = cg('count') * (1 + M.GC_GROW)
+      cg('setpause', M.GC_PAUSE)
+      break
+    end
+  until clock() >= gcEnd
+  return true
+end
 local marks, prevMarks = {}, {}
 local hitches = {}
 local function mark(name, t0)
@@ -1825,7 +1853,22 @@ local function engineTickMs()
   local dbg = Engine and Engine.Debug
   if not (dbg and dbg.getLastPerformanceMetrics) then return 0 end
   if not pcall(dbg.getLastPerformanceMetrics, tickMetrics) then return 0 end
+  -- every subsystem's ms summed over the frames since M.engineSums() last ran (tools/perf_watch.py, every second:
+  -- the steady drop on new ground showed in no hitch, 2026-10-28)
+  local es = M.engineAcc
+  es.frames = es.frames + 1
+  for k, v in pairs(tickMetrics) do
+    -- (not its memory counters: physUsed, virtAvailable, ... in bytes)
+    if type(v) == 'number' and not k:match('^phys') and not k:match('^virt') then es.ms[k] = (es.ms[k] or 0) + v end
+  end
   return tonumber(tickMetrics.Ticking) or 0
+end
+M.engineAcc = { frames = 0, ms = {} }
+-- { frames, ms = { subsystem = ms summed } } since the last call, then starts again.
+function M.engineSums()
+  local es = M.engineAcc
+  M.engineAcc = { frames = 0, ms = {} }
+  return es
 end
 
 local function onUpdate(dtReal, dtSim)
@@ -1849,6 +1892,11 @@ local function onUpdate(dtReal, dtSim)
   if st.inOurLevel and not st.paused then
     local okP, errP = pcall(perfFrame, frameMs0, hrec)
     if not okP then log('W', 'beamngEarth', 'perf log: ' .. tostring(errP)) end
+  end
+  do -- the mod's parts summed too (engineSums' mod)
+    local mm = M.engineAcc.mod or {}
+    for k, v in pairs(marks) do if type(v) == 'number' then mm[k] = (mm[k] or 0) + v end end
+    M.engineAcc.mod = mm
   end
   prevMarks, marks = marks, prevMarks
   for k in pairs(marks) do marks[k] = nil end
@@ -1913,10 +1961,7 @@ local function onUpdate(dtReal, dtSim)
   -- in single frames as the heap grew 128 -> 259 MB): steps until GC_STEP_MS is spent or a cycle ends, so the engine
   -- never faces a whole cycle in one frame.
   if M.GC_STEP_MS > 0 then
-    local gcEnd = t + M.GC_STEP_MS
-    repeat
-      if collectgarbage('step', M.GC_STEP_KB) then break end
-    until hitchClock() >= gcEnd
+    M.gcStep(t + M.GC_STEP_MS, hitchClock)
     t = mark('gc', t)
   end
   if not scenetree.MissionGroup then return end -- no level loaded
@@ -2319,6 +2364,19 @@ end
 -- Far-tile streaming budget per frame in ms (the governor's target, 1-4 ms; default 2). Returns the value in use.
 function M.setFarBudget(ms)
   return gov:setTarget(ms)
+end
+
+-- The Finnish fork: the main thread's per-frame budgets scaled by s (hello.budget, 0.25-1): far-tile streaming (the
+-- governor's target, its floor 1 ms), the trees' Lua time and the GC step. Driving into new ground spent them every
+-- frame (~2.6 ms, 137 -> ~100 fps, 2026-10-28); smaller ones trade later pop-in for frame rate. Returns s in use.
+M.BUDGET_FULL = { far = governor.DEFAULT_TARGET_MS, trees = trees.FRAME_MS, gc = M.GC_STEP_MS }
+function M.setBudgetScale(s)
+  s = math.max(0.25, math.min(1, tonumber(s) or 1))
+  local f = M.BUDGET_FULL
+  gov:setTarget(f.far * s)
+  trees.FRAME_MS, M.GC_STEP_MS = f.trees * s, f.gc * s
+  M.budgetScale = s
+  return s
 end
 
 -- The connected server's hello (its version and options; nil before one arrived), for the reports.

@@ -269,6 +269,15 @@ TILE_CACHE = {32: 6000, 64: 2500}
 HM_THREADS = 4
 LAG_TICK_S, LAG_REPORT_S = 0.1, 0.25     # the event-loop stall report (-v)
 ROAD_PROCESSES = 2              # road-tile processes (--block-process on, --roads on)
+LIGHT_LOD_K = 2.0               # BNGE_LIGHT=1's far-field K for every level (the layout's: 3 for L1-L2, 2.5 beyond)
+
+
+def budget_scale():
+    """BNGE_BUDGET=<0.25-1>: the mod's per-frame budgets scaled (hello.budget, core.setBudgetScale); 1 by default."""
+    try:
+        return max(0.25, min(1.0, float(os.environ.get("BNGE_BUDGET") or 1)))
+    except ValueError:
+        return 1.0
 WORKERS = 3                     # far-tile workers (--workers)
 TRACE_S = 60.0                  # BNGE_TRACEMALLOC: seconds between the memory reports ...
 TRACE_TOP = 15                  # ... and the allocation sites in each
@@ -3306,7 +3315,9 @@ class Connection:
             m = {"type": "hello", "protocol": PROTOCOL, "format": lay.format, "serverVersion": SERVER_VERSION,
                  "appVersion": updatesmod.local_version() or "",     # the release (VERSION): the players' reports
                  "sessionId": self.s.sid, "farFormat": self.s.far_format, "material": farfield.MATERIAL,
-                 "nearVisual": self.s.near_visual, "attribution": self.s.attribution()}
+                 "nearVisual": self.s.near_visual, "attribution": self.s.attribution(),
+                 "light": os.environ.get("BNGE_LIGHT") == "1",
+                 "budget": budget_scale()}
             if self.s.imagery is not None:      # the world map credits the sources its view shows
                 m["imageryCredits"] = self.s.imagery.credits_by_area()
                 m["otherCredits"] = self.s.attribution_rest()
@@ -4526,6 +4537,10 @@ async def main_async(args):
             log.warning("the game writes shape version 0x%08x, this server 0x%08x: using DAE far tiles",
                         v, cdae.VERSION_WORD)
             fmt = "dae"
+    # (the Finnish fork: BNGE_LIGHT=1, a lighter world for A/B drives and weaker PCs: coarser far tiles, and the mod
+    # thins its trees (hello.light, trees.setLight), 2026-10-28)
+    if args.lod_k is None and os.environ.get("BNGE_LIGHT") == "1":
+        args.lod_k = LIGHT_LOD_K
     kfun = None if args.lod_k is None else (lambda lvl: args.lod_k)
     radii = None
     if args.near_radii is not None:

@@ -75,6 +75,13 @@ trees.update(1, { x = 50, y = 1100 })
 T.check(count() == 35, 'beyond 700 m: 35 %')
 trees.update(1, { x = 50, y = 600 })
 T.check(count() == 60, 'middle distance: 60 %')
+-- a lighter world (hello.light): fewer past 300 m, every tile looked at again; off: back to the full rings
+trees.setLight(true)
+trees.update(1, { x = 50, y = 600 })
+T.check(count() == 35 and trees.light, 'light: middle distance 35 %')
+trees.setLight(false)
+trees.update(1, { x = 50, y = 600 })
+T.check(count() == 60 and not trees.light, 'light off: 60 % again')
 
 -- only near tiles collide: their items are re-made of solid types when the tile comes near, and of non-solid ones
 -- once it is beyond SOLID_M + SOLID_HYST_M

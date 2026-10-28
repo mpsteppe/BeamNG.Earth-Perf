@@ -57,7 +57,24 @@ def split(share=SERVER_SHARE):
         pass
     server = {c for _, cpus in cores[-k:] for c in cpus}
     game = {c for _, cpus in cores[:-k] for c in cpus}
+    # (the Finnish fork: BNGE_SERVER_CPUS / BNGE_GAME_CPUS="0-7,12" name the CPUs outright, for A/B drives on the
+    # i7-12700K: FPS at speed fell with the server's load on its own cores, 2026-10-28; E-cores busy are suspected)
+    server = cpu_list(os.environ.get("BNGE_SERVER_CPUS", "")) or server
+    game = cpu_list(os.environ.get("BNGE_GAME_CPUS", "")) or game
     return server, game
+
+
+def cpu_list(text):
+    """{cpu ids} of "0-7,12" (empty or malformed: an empty set)."""
+    out = set()
+    try:
+        for part in text.replace(" ", "").split(","):
+            if part:
+                a, _, b = part.partition("-")
+                out.update(range(int(a), int(b or a) + 1))
+    except ValueError:
+        return set()
+    return out
 
 
 def pin_self(cpus):

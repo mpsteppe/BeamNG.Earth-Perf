@@ -29,7 +29,8 @@ if pos then
 end
 local st = beamngEarth_core._state() or {}
 return jsonEncode({ speed = vel and math.sqrt(vel.x ^ 2 + vel.y ^ 2 + vel.z ^ 2) or 0, agl = agl,
-  follows = st.followCount, anchor = st.anchorId, status = st.status })
+  follows = st.followCount, anchor = st.anchorId, status = st.status,
+  engine = beamngEarth_core.engineSums and beamngEarth_core.engineSums() or nil })
 '''
 
 
@@ -38,6 +39,41 @@ def lua_json(code):
         return json.loads(mcp.call("run_lua", {"code": code}))
     except Exception:           # a busy frame, the game gone: the next poll
         return None
+
+
+NEW_GROUND_CPU = 200    # server CPU % over which a second counts as new ground (the world being built)
+
+
+def engine_split(rows):
+    """Report lines: the engine's subsystems and the mod's parts in ms a frame, moving (over 60 mph) on new ground
+    (the server busy) against built ground, the stages that grow first (core.engineSums; 2026-10-28: on the same road
+    93 fps building, 110 built, and no hitch showed why)."""
+    def per_frame(group):
+        tot, frames = {}, 0
+        for r in group:
+            e = r.get("engine") or {}
+            n = e.get("frames") or 0
+            if not n:
+                continue
+            frames += n
+            for src, pre in ((e.get("ms") or {}, ""), (e.get("mod") or {}, "mod ")):
+                if isinstance(src, dict):
+                    for k, v in src.items():
+                        tot[pre + k] = tot.get(pre + k, 0.0) + v
+        return {k: v / frames for k, v in tot.items()} if frames else {}, frames
+    moving = [r for r in rows if (r.get("mph") or 0) > 60 and r.get("engine")]
+    if not moving:
+        return []
+    new = [r for r in moving if (r.get("procs", {}).get("server", {}).get("cpu") or 0) > NEW_GROUND_CPU]
+    built = [r for r in moving if r not in new]
+    a, fa = per_frame(new)
+    b, fb = per_frame(built)
+    out = [f"## Frame time by stage, moving: new ground ({len(new)} s, {fa} frames) vs built ({len(built)} s, "
+           f"{fb} frames), ms a frame", "", "| stage | new | built | diff |", "|---|---|---|---|"]
+    for k in sorted(set(a) | set(b), key=lambda k: -(a.get(k, 0) - b.get(k, 0))):
+        if max(a.get(k, 0), b.get(k, 0)) >= 0.05:
+            out.append(f"| {k} | {a.get(k, 0):.2f} | {b.get(k, 0):.2f} | {a.get(k, 0) - b.get(k, 0):+.2f} |")
+    return out + [""]
 
 
 def report(rows, out):
@@ -74,8 +110,9 @@ def report(rows, out):
         lines.append(f"- t={t:.0f}s {ms} ms at {mph:.0f} mph{'' if agl is None else f', {agl:.0f} m up'}: {e}"
                      f"{' | mod: ' + m if m else ''}")
     lines.append("")
+    lines += engine_split(rows)
     # physics
-    slow = [r for r in rows if ((r.get("perf") or {}).get("simWall") or 1) < 0.95]
+    slow =[r for r in rows if ((r.get("perf") or {}).get("simWall") or 1) < 0.95]
     lines.append(f"## Physics slower than real time: {len(slow)} of {secs} seconds")
     for r in sorted(slow, key=lambda r: r["perf"]["simWall"])[:10]:
         p = r["perf"]
@@ -127,6 +164,7 @@ def main():
                     r["mph"] = (x.get("speed") or 0) * 2.23694
                     r["agl"] = x.get("agl")
                     r["follows"], r["status"] = x.get("follows"), x.get("status")
+                    r["engine"] = x.get("engine")   # (core.engineSums: every subsystem's ms over the second)
                 r["procs"] = sampler.sample()
                 rows.append(r)
                 f.write(json.dumps(r) + "\n")

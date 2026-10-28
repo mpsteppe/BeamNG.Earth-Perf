@@ -18,6 +18,17 @@ M.RINGS = { { 300, 1.0 }, { 700, 0.6 }, { 1500, 0.35 }, { 1e9, 0.2 } }   -- tile
 -- on the GPU, and the engine's tick hitched at every tile change while driving: 19.8 fps over a drive, 38.4 with trees
 -- off; 2026-10-20). Cities and farmland stay under it (Columbia: ~540 a tile).
 M.TILE_CAP = { { 300, 6000 }, { 700, 2400 }, { 1500, 900 }, { 1e9, 400 } }
+-- The Finnish fork: a lighter world (server BNGE_LIGHT=1, hello.light): fewer trees past 300 m, for A/B drives and
+-- weaker PCs (2026-10-28: on new ground the trees' Lua took ~0.6 ms a frame, plus the engine's per-shape item cost)
+local FULL = { rings = M.RINGS, cap = M.TILE_CAP }
+local LIGHT = { rings = { { 300, 1.0 }, { 700, 0.35 }, { 1500, 0.2 }, { 1e9, 0.1 } },
+  cap = { { 300, 6000 }, { 700, 1200 }, { 1500, 450 }, { 1e9, 200 } } }
+function M.setLight(on)
+  local p = on and LIGHT or FULL
+  if M.RINGS == p.rings then return end
+  M.RINGS, M.TILE_CAP, M.light = p.rings, p.cap, on and true or nil
+  if M.refresh then M.refresh() end
+end
 -- small props only near the player (2026-10-14, Fells Point at street level: ~10 ms a frame for the Forest
 -- with a door on every house out to 300 m): the tile distance (m) beyond which a group is not shown
 -- rocks only over the fine ground (farfield.NEAR_RADII: L0 within 400 m): beyond it the coarser tiles round off the

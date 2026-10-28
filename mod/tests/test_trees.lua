@@ -456,6 +456,12 @@ do
   for _ = 1, 20 do trees.update(1, p) end
   T.check(first > 0 and first < 40 and count() - before == 40, 'one new shape a frame, all made in the end')
   trees.clear()
+  -- made again (a rebase: the shapes back at 0 items): no longer limited
+  trees.onTile({ anchorId = 1, key = '20_20', path = '/t/m.json', n = 40 }, 1)
+  local b2 = count()
+  trees.update(1, p)
+  T.check(count() - b2 == 40, 'shapes made before: all at once')
+  trees.clear()
   trees.FIRSTS_PER_FRAME = math.huge
 end
 trees.FIRSTS_PER_FRAME = FIRSTS

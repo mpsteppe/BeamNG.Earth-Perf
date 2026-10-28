@@ -230,6 +230,7 @@ local foci = {}         -- other vehicles' collision foci { x, y, r, trees } (M.
 local ghostSince = nil               -- since the last rebase that left ghost tiles (M.transform)
 local types = {}        -- "shape" / "shape#n" (not solid) -> TSForestItemData
 local pop = {}          -- shape -> its items in the level
+local everMade = {}     -- shape -> true once an item of it was made in this level (allow: FIRSTS_PER_FRAME)
 local ready = false
 M.made, M.removed, M.errors = 0, 0, 0
 M.unknownGroups = {}      -- groups seen without a CATALOG entry (logged once each)
@@ -451,6 +452,7 @@ local function makeItem(fd, t, i, shape, sc, solid, group, variant)
     if (pop[shape] or 0) == 0 then M.frame.firstOf = (M.frame.firstOf or 0) + 1 end   -- a shape's first item: its load
   end
   pop[shape] = (pop[shape] or 0) + 1
+  everMade[shape] = true
   return it
 end
 
@@ -465,12 +467,14 @@ local touched, touchedItems = {}, 0
 local warmOne       -- (below M.update)
 -- A shape with no item in the level costs the engine's tick ~5-15 ms for its first one (traceWarm 2026-10-28: 24-26 of
 -- them in one loading frame were 115-130 ms frames, 2-3 while driving 30-70 ms): FIRSTS_PER_FRAME of them at most.
+-- Only a shape never loaded in this level counts: after a rebase every tile's trees are made again (their shapes back at
+-- 0 items), and with every shape limited the forest round the car stayed empty for seconds (in-game 2026-10-28).
 M.FIRSTS_PER_FRAME = 1
 local firsts = 0
 local function allow(shape)
   if touched[shape] then return true end
   local n = pop[shape] or 0
-  if n == 0 then
+  if n == 0 and not everMade[shape] then
     if firsts >= M.FIRSTS_PER_FRAME then return false end
     firsts = firsts + 1
   end
@@ -869,6 +873,7 @@ end
 function M.reset()
   tiles, types, ready, pool, forestCount, pop = {}, {}, false, {}, 0, {}
   warmList, warmNext, warmForest = nil, 1, nil
+  everMade = {}
 end
 
 function M.status()

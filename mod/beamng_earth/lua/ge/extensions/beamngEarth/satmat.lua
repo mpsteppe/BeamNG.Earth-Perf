@@ -114,6 +114,51 @@ local warned = {}
 -- Is the name a pooled one (kept and re-used, never deleted)?
 function M.pooled(name) return type(name) == 'string' and name:find('^bngEarthFar_') ~= nil end
 
+-- A restarted server takes over our pool (2026-10-28: every server run made a pool of its own, and a game that
+-- outlived 3 servers held 3174 pooled Materials for 829 tiles, the frame rate falling with them until a restart).
+-- hello.farPool (M.pool): the pool we hold the most of, its size and the numbers still shown; the server hands out
+-- the others again and keeps those until pose.farPoolFreed (M.takeFreed) says no tile shows them any more.
+local watch = {}      -- pooled name -> true: shown when the hello listed it (reported once unused)
+local freed = {}      -- { tag, n } of watched names no longer shown
+local function poolOf(name)
+  if type(name) ~= 'string' then return nil end
+  local tag, n = name:match('^bngEarthFar_(%w+)_(%d+)$')
+  if tag then return tag, tonumber(n) end
+end
+M.poolOf = poolOf
+
+-- { tag, made, inUse = {n...} } of the pool we hold the most names of (nil when none). Watches its shown names.
+function M.pool()
+  local count = {}
+  for name in pairs(mats) do
+    local tag = poolOf(name)
+    if tag then count[tag] = (count[tag] or 0) + 1 end
+  end
+  local best
+  for tag, c in pairs(count) do if not best or c > count[best] then best = tag end end
+  if not best then return nil end
+  local made, inUse = 0, {}
+  watch, freed = {}, {}
+  for name, e in pairs(mats) do
+    local tag, n = poolOf(name)
+    if tag == best then
+      made = math.max(made, n + 1)
+      if e.refs > 0 then inUse[#inUse + 1] = n; watch[name] = true end
+    end
+  end
+  table.sort(inUse)
+  return { tag = best, made = made, inUse = inUse }
+end
+
+-- { tag, {n...} } of the watched names no longer shown since the last call (nil when none).
+function M.takeFreed()
+  if #freed == 0 then return nil end
+  local tag, out = freed[1][1], {}
+  for _, f in ipairs(freed) do if f[1] == tag then out[#out + 1] = f[2] end end
+  freed = {}
+  return { tag = tag, n = out }
+end
+
 local function warnOnce(key, text)
   if warned[key] then return end
   warned[key] = true
@@ -240,6 +285,11 @@ function M.unref(name)
   if e.refs <= 0 then
     e.refs = 0
     retexWant[name] = nil -- nobody shows it: a queued switch is dropped when it comes up
+    if watch[name] then   -- a name a restarted server keeps for us (M.pool): free for it now
+      watch[name] = nil
+      local tag, n = poolOf(name)
+      freed[#freed + 1] = { tag, n }
+    end
     if not queued[name] and not M.pooled(name) then
       queued[name] = true
       delQ[#delQ + 1] = name
@@ -341,6 +391,7 @@ function M.clearAll()
     if m then m:delete() end
   end
   mats, delQ, queued, nMats = {}, {}, {}, 0
+  watch, freed = {}, {}
   retexQ, rqH, rqT, retexWant = {}, 1, 0, {}
   detailChecked = false
 end

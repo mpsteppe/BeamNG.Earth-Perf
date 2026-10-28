@@ -3394,6 +3394,14 @@ class Connection:
                         self.slot_holds[int(g[0])] = g[1]
             # a game that outlived its server: keep the session folders its tiles still use
             self.s.claim_sessions(self, msg.get("sessions"))
+            # ... and take over its far tiles' pooled Materials, not make a pool of our own (matslots.adopt)
+            pool = msg.get("farPool")
+            if isinstance(pool, dict):
+                in_use = pool.get("inUse")
+                in_use = list(in_use.values()) if isinstance(in_use, dict) else in_use   # (an empty Lua table: {})
+                if self.s.matslots.adopt(pool.get("tag"), pool.get("made"), in_use if isinstance(in_use, list) else []):
+                    log.info("far-tile materials: the game's pool %s taken over: %s", pool.get("tag"),
+                             self.s.matslots.stats())
             # a mod that reads a vegetation tile as one flat array of numbers (no table per item in its Lua: trees.lua);
             # an older one gets the rows
             self.veg_flat = msg.get("vegFlat") is True
@@ -3830,6 +3838,10 @@ class Connection:
 
     def on_pose(self, msg):
         self.slots_gone(msg.get("slotsGone"))
+        freed = msg.get("farPoolFreed")     # adopted Materials the earlier server's tiles no longer show
+        if isinstance(freed, dict) and freed.get("tag") == self.s.matslots.tag():
+            n = freed.get("n")
+            self.s.matslots.unreserve(list(n.values()) if isinstance(n, dict) else n if isinstance(n, list) else [])
         held = msg.get("held")
         if isinstance(held, dict):      # an empty Lua table may encode as {}
             held = list(held.values())

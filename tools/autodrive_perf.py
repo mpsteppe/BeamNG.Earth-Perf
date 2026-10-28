@@ -98,6 +98,13 @@ PAGE = os.sysconf("SC_PAGE_SIZE") if hasattr(os, "sysconf") else 4096
 
 def _procs():
     """{pid: (ppid, cmdline)} of every process."""
+    if not os.path.isdir("/proc"):      # (Windows: psutil)
+        import psutil
+        out = {}
+        for p in psutil.process_iter(["ppid", "cmdline", "exe"]):
+            cmd = p.info["cmdline"] or ([p.info["exe"]] if p.info["exe"] else [])
+            out[p.pid] = (p.info["ppid"] or 0, " ".join(cmd))
+        return out
     out = {}
     for d in os.listdir("/proc"):
         if not d.isdigit():
@@ -117,6 +124,17 @@ def _procs():
 def _cpu_rss(pids):
     """(cpu seconds, rss MB) summed over pids."""
     cpu = rss = 0.0
+    if not os.path.isdir("/proc"):
+        import psutil
+        for pid in pids:
+            try:
+                p = psutil.Process(pid)
+                t = p.cpu_times()
+                cpu += t.user + t.system
+                rss += p.memory_info().rss / 1e6
+            except psutil.Error:
+                continue
+        return cpu, rss
     for pid in pids:
         try:
             with open(f"/proc/{pid}/stat") as f:
@@ -157,7 +175,8 @@ class ProcSampler:
         exe = os.path.expanduser("~/.local/share/Steam/steamapps/common/BeamNG.drive/BinLinux/BeamNG.drive.x64")
         exe = os.path.realpath(exe)     # (Steam's runtime starts it as ~/.steam/steam/..., a link to the same)
         game = [p for p, (_, c) in ps.items()
-                if c and "--type=" not in c and os.path.realpath(c.split(" ", 1)[0]) == exe]
+                if c and "--type=" not in c and (os.path.realpath(c.split(" ", 1)[0]) == exe
+                                                 or "beamng.drive.x64.exe" in c.lower())]   # (Windows: spaces in the path)
         return {"server": sorted(kids), "game": game}
 
     def sample(self):

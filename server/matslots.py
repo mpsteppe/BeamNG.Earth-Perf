@@ -44,6 +44,41 @@ class MatSlots:
         self.slot = {}          # ck -> number
         self.owner = {}         # number -> ck
         self.waiting = set()    # numbers no tile owns that a game still holds (free once it lets go)
+        self.reserved = set()   # adopted numbers an earlier server's tiles still show (adopt; free on unreserve)
+
+    def adopt(self, tag, made, in_use):
+        """Take over the pool a game already holds (hello.farPool, 2026-10-28: a game that outlived three servers held
+        all three pools, 3174 Materials for 829 tiles): its names, made up to `made`, free again except `in_use`
+        (still shown by the earlier server's tiles), which wait for unreserve(). Only before this server has handed out
+        a name, and only a tag as long as its own (restamp keeps a shape's length). Returns whether it took it."""
+        tag = str(tag)
+        old = self.prefix[len(PREFIX) + 1:-1]
+        try:
+            made = int(made)
+        except (TypeError, ValueError):
+            return False
+        if not tag.isalnum() or len(tag) != len(old) or not 0 < made <= 10 ** DIGITS:
+            return False
+        in_use = {int(n) for n in in_use if isinstance(n, (int, float)) and not isinstance(n, bool) and 0 <= n < made}
+        with self.lock:
+            if self.made or self.slot:
+                return False
+            self.prefix = f"{PREFIX}_{tag}_"
+            self.made = made
+            self.reserved = in_use
+            self.free = [n for n in range(made - 1, -1, -1) if n not in in_use]    # (popped from the end: 0 first)
+        return True
+
+    def unreserve(self, numbers):
+        """The game no longer shows these adopted names (pose.farPoolFreed): free to hand out."""
+        with self.lock:
+            for n in numbers:
+                if isinstance(n, (int, float)) and int(n) in self.reserved:
+                    self.reserved.discard(int(n))
+                    self.free.append(int(n))
+
+    def tag(self):
+        return self.prefix[len(PREFIX) + 1:-1]
 
     def name(self, n):
         return f"{self.prefix}{n:0{DIGITS}d}"
@@ -120,7 +155,8 @@ class MatSlots:
 
     def stats(self):
         with self.lock:
-            return {"made": self.made, "owned": len(self.slot), "free": len(self.free), "waiting": len(self.waiting)}
+            return {"made": self.made, "owned": len(self.slot), "free": len(self.free), "waiting": len(self.waiting),
+                    "reserved": len(self.reserved)}
 
 
 def restamp(data, old, new):

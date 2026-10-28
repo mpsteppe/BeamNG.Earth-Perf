@@ -34,6 +34,29 @@ return jsonEncode({ speed = vel and math.sqrt(vel.x ^ 2 + vel.y ^ 2 + vel.z ^ 2)
 '''
 
 
+# What the scene holds, every SCENE_EVERY polls (the user, 2026-10-28: the FPS comes back when a restart hides the
+# objects, so what piles up is the suspect). Named objects by class, the road group's size and the counting's own
+# cost (~12 ms: that second's p99 is not the game's).
+SCENE_EVERY = 10
+SCENE_LUA = r'''
+local t0 = os.clock()
+local byClass = {}
+for _, nm in ipairs(scenetree.getAllObjects() or {}) do
+  local o = scenetree.findObject(nm)
+  if o then local c = o:getClassName(); byClass[c] = (byClass[c] or 0) + 1 end
+end
+local keep = {}
+for _, c in ipairs({'TSStatic', 'SpotLight', 'PointLight', 'Forest', 'forestItemData', 'WaterBlock', 'River',
+                    'DecalRoad', 'MeshRoad', 'ProceduralMesh', 'material', 'SimGroup', 'GroundCover'}) do
+  keep[c] = byClass[c]
+end
+local total = 0
+for _, n in pairs(byClass) do total = total + n end
+local rs = require('beamngEarth/roads').status() or {}
+return jsonEncode({ total = total, classes = keep, roadMeshes = rs.roadMeshes, ms = (os.clock() - t0) * 1000 })
+'''
+
+
 def lua_json(code):
     try:
         return json.loads(mcp.call("run_lua", {"code": code}))
@@ -131,6 +154,17 @@ def report(rows, out):
     bl = [r.get("backlog") for r in rows if r.get("backlog") is not None]
     if bl:
         lines.append(f"- server backlog: {sum(bl) / len(bl):.0f} average, {max(bl)} peak")
+    sc = [r for r in rows if r.get("scene")]
+    if sc:
+        def counts(r):
+            s = r["scene"]
+            return dict(s.get("classes") or {}, total=s.get("total"), roadMeshes=s.get("roadMeshes"))
+        first, last = counts(sc[0]), counts(sc[-1])
+        peak = max(sc, key=lambda r: r["scene"].get("total") or 0)
+        lines += ["", "## Scene (named objects; every %d s)" % SCENE_EVERY,
+                  f"- peak {peak['scene'].get('total')} at t={peak['t']:.0f}s"]
+        for k in sorted(set(first) | set(last), key=lambda k: -(last.get(k) or 0)):
+            lines.append(f"- {k}: {first.get(k)} -> {last.get(k)}")
     sp = [r.get("mph") or 0 for r in rows]
     lines.append(f"- player: up to {max(sp):.0f} mph; {sum(1 for r in rows if (r.get('agl') or 0) > 50)} s more than "
                  "50 m above the ground")
@@ -160,12 +194,15 @@ def main():
             x = lua_json(EXTRA_LUA)
             if r:
                 r["t"] = round(tick - t0, 1)
+                r["wall"] = round(tick, 2)      # (to line up with the server's log lines)
                 if x:
                     r["mph"] = (x.get("speed") or 0) * 2.23694
                     r["agl"] = x.get("agl")
                     r["follows"], r["status"] = x.get("follows"), x.get("status")
                     r["engine"] = x.get("engine")   # (core.engineSums: every subsystem's ms over the second)
                 r["procs"] = sampler.sample()
+                if len(rows) % SCENE_EVERY == 0:
+                    r["scene"] = lua_json(SCENE_LUA)
                 rows.append(r)
                 f.write(json.dumps(r) + "\n")
                 f.flush()

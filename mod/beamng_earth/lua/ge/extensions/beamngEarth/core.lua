@@ -795,8 +795,10 @@ local function onMessage(msg)
       for _, h in ipairs(roads.slotsHeld(farfield.session())) do held[#held + 1] = h end
     end
     -- vegFlat: the vegetation tiles may come as one flat array of numbers (trees.lua onTile), no table per tree
+    -- farPool: the far tiles' pooled Materials we hold, for a restarted server to take over (satmat.pool)
     net.send({ type = 'hello', protocol = PROTOCOL, format = FORMAT, modVersion = MOD_VERSION,
-      sessions = farfield.heldSessions(), slotSession = farfield.session(), slotsHeld = held, vegFlat = true })
+      sessions = farfield.heldSessions(), slotSession = farfield.session(), slotsHeld = held, vegFlat = true,
+      farPool = require('beamngEarth/satmat').pool() })
     setStatus('Connected to companion server')
   elseif t == '_disconnected' then
     st.pending, st.sessionId, st.terrainPending = nil, nil, nil
@@ -1309,6 +1311,7 @@ local function updateWorld(dt)
       held = (farfield.session() == st.sessionId) and farfield.heldAnchors() or {},
       sessions = farfield.heldSessions(),
       slotsGone = slotsGoneNow(), -- pooled shape slots let go (server/matslots.py)
+      farPoolFreed = require('beamngEarth/satmat').takeFreed(), -- hello.farPool's shown names, no longer shown
       foci = poseFoci(),          -- other vehicles' collision islands (collisionfoci.lua; earthd parse_foci)
       cam = c and { x = c.x, y = c.y, z = c.z, fx = c.fx, fy = c.fy, fz = c.fz, fovDeg = c.fovDeg, h = c.h } or nil })
   end

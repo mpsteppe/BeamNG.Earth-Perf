@@ -21,7 +21,30 @@ class PoolTest(unittest.TestCase):
         p.release((1, "0_0_0"))
         self.assertFalse(p.owns((1, "0_0_0"), a))
         self.assertEqual(p.take((2, "0_0_0")), a)            # the freed name goes to the next tile
-        self.assertEqual(p.stats(), {"made": 2, "owned": 2, "free": 0, "waiting": 0})
+        self.assertEqual(p.stats(), {"made": 2, "owned": 2, "free": 0, "waiting": 0, "reserved": 0})
+
+    def test_adopt_the_games_pool(self):
+        # a game that outlived its server holds pool "0918" of 6 names, 1 and 4 still shown: this server hands out
+        # the others first (0 first), keeps 1 and 4 until the game frees them, then makes new ones after 5
+        p = matslots.MatSlots("ab12")
+        self.assertTrue(p.adopt("0918", 6, [1, 4]))
+        self.assertEqual(p.tag(), "0918")
+        got = [p.take((1, f"0_{i}_0")) for i in range(4)]
+        self.assertEqual(got, [f"bngEarthFar_0918_{n:05d}" for n in (0, 2, 3, 5)])
+        self.assertEqual(p.take((1, "0_9_0")), "bngEarthFar_0918_00006")     # 1 and 4 are still shown
+        p.unreserve([4, 7])                                                   # (7 was never reserved)
+        self.assertEqual(p.take((1, "0_10_0")), "bngEarthFar_0918_00004")
+        self.assertEqual(p.stats()["reserved"], 1)
+
+    def test_adopt_only_a_fresh_pool_and_a_fitting_tag(self):
+        p = matslots.MatSlots("ab12")
+        self.assertFalse(p.adopt("09189", 6, []))         # restamp needs names of the same length
+        self.assertFalse(p.adopt("09-8", 6, []))
+        self.assertFalse(p.adopt("0918", 0, []))
+        self.assertFalse(p.adopt("0918", "x", []))
+        p.take((1, "0_0_0"))
+        self.assertFalse(p.adopt("0918", 6, []))          # names handed out already: keep our own
+        self.assertEqual(p.tag(), "ab12")
 
     def test_reclaim_until_target(self):
         p = matslots.MatSlots("ab12")
@@ -139,7 +162,7 @@ class ServerTest(unittest.TestCase):
         earthd.Connection.slots_gone(c, [[n, 4]])       # an older send's object: still held
         self.assertEqual(self.s.matslots.stats()["free"], 0)
         earthd.Connection.slots_gone(c, [[n, 5]])
-        self.assertEqual(self.s.matslots.stats(), {"made": 1, "owned": 0, "free": 1, "waiting": 0})
+        self.assertEqual(self.s.matslots.stats(), {"made": 1, "owned": 0, "free": 1, "waiting": 0, "reserved": 0})
 
     def test_road_shapes_pooled_and_held(self):
         c = Conn()

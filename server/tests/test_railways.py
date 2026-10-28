@@ -1,5 +1,6 @@
 """Railway tracks (railways.py): the rail lines taken, the level crossings, the bed's heights and the mesh."""
 import math
+import json
 import os
 import sys
 import tempfile
@@ -358,6 +359,23 @@ class RailwayTest(unittest.TestCase):
             roads.write_tile(d, "/vfs", 1, 0, 0, [], rail_mesh=mesh)
             self.assertTrue(os.path.exists(os.path.join(d, "rail_1_0_0.cdae")))
             self.assertIn("rail", roads.shape_files(1, 0, 0))
+
+    def test_lean_collision_mesh(self):
+        """The ballast bed collides (railcol, collision only); the rails and sleepers only render (the Finnish fork,
+        2026-10-28: a 2.2 MB rail tile colliding whole was a 63-72 ms frame)."""
+        f = features([[(-50.0, 100.0), (300.0, 100.0)]], ["standard_gauge"], subtypes=["rail"])
+        mesh = railways.tile_mesh(FRAME, 0, 0, [f], flat)
+        P, T, UV, name = roads.rail_collision(mesh)
+        self.assertNotIn(name, roads.RAIL_RENDER_ONLY)
+        self.assertLess(len(T), len(mesh[1]) / 3, "far fewer triangles than the drawn mesh")
+        self.assertEqual(int(T.max()) + 1, len(P), "vertices compacted")
+        with tempfile.TemporaryDirectory() as d:
+            roads.write_tile(d, "/vfs", 1, 0, 0, [], rail_mesh=mesh)
+            self.assertTrue(os.path.exists(os.path.join(d, "railcol_1_0_0.cdae")))
+            with open(os.path.join(d, "roads_1_0_0.json")) as fh:
+                data = json.load(fh)
+            self.assertEqual(data["railcol"]["shape"], "/vfs/railcol_1_0_0.cdae")
+        self.assertIn("railcol", roads.shape_files(1, 0, 0))
 
 
 

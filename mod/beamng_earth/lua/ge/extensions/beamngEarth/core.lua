@@ -1698,8 +1698,8 @@ end
 M.HITCH_MS = 50
 M.HITCH_KEEP = 64
 local hitchClock = stopwatch.clock()
-local GC_STEP_MS = tonumber(os.getenv and os.getenv('BNE_GC_STEP_MS') or '') or 1.0   -- (0 = off)
-local GC_STEP_KB = 64
+M.GC_STEP_MS = tonumber(os.getenv and os.getenv('BNE_GC_STEP_MS') or '') or 1.0   -- (0 = off)
+M.GC_STEP_KB = 64       -- (module fields, not locals: core.lua is at Lua's 200 locals)
 local marks, prevMarks = {}, {}
 local hitches = {}
 local function mark(name, t0)
@@ -1912,10 +1912,10 @@ local function onUpdate(dtReal, dtSim)
   -- Lua garbage in small steps every frame (the user's stutter driving, 2026-10-27: the engine's LuaGC took 120-190 ms
   -- in single frames as the heap grew 128 -> 259 MB): steps until GC_STEP_MS is spent or a cycle ends, so the engine
   -- never faces a whole cycle in one frame.
-  if GC_STEP_MS > 0 then
-    local gcEnd = t + GC_STEP_MS
+  if M.GC_STEP_MS > 0 then
+    local gcEnd = t + M.GC_STEP_MS
     repeat
-      if collectgarbage('step', GC_STEP_KB) then break end
+      if collectgarbage('step', M.GC_STEP_KB) then break end
     until hitchClock() >= gcEnd
     t = mark('gc', t)
   end
